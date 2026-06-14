@@ -1,0 +1,226 @@
+{
+  "version": 1,
+  "tags": [
+    {
+      "slug": "artificial-intelligence",
+      "name": "Artificial Intelligence",
+      "description": "Events focused on AI, machine learning, generative AI, LLMs, and intelligent automation.",
+      "synonyms": ["AI", "machine learning", "GenAI", "LLM", "deep learning", "neural networks"],
+      "negative_signals": [
+        "generic digital transformation with no AI content",
+        "AI investments or investing in AI at a non-AI conference",
+        "specialist AI summit inside a broader multi-topic event"
+      ],
+      "related_tags": ["saas-enterprise-software", "cloud-infrastructure"]
+    },
+    {
+      "slug": "cybersecurity",
+      "name": "Cybersecurity",
+      "description": "Events about information security, identity, fraud prevention, and security operations.",
+      "synonyms": ["infosec", "zero trust", "threat detection", "IAM", "SOC", "data protection"],
+      "negative_signals": ["privacy panel with no security focus"],
+      "related_tags": ["cloud-infrastructure", "fintech"]
+    },
+    {
+      "slug": "cloud-infrastructure",
+      "name": "Cloud & Infrastructure",
+      "description": "Events about cloud platforms, DevOps, data centers, and enterprise IT infrastructure.",
+      "synonyms": ["cloud computing", "DevOps", "Kubernetes", "AWS", "Azure", "GCP", "data center"],
+      "negative_signals": ["single cloud sponsor booth at unrelated event"],
+      "related_tags": ["saas-enterprise-software", "developer-open-source"]
+    },
+    {
+      "slug": "saas-enterprise-software",
+      "name": "SaaS & Enterprise Software",
+      "description": "Events about B2B software platforms, workflow tools, and enterprise digital transformation.",
+      "synonyms": ["SaaS", "ERP", "CRM", "enterprise software", "B2B software", "workflow automation"],
+      "negative_signals": ["hardware-only trade show"],
+      "related_tags": ["cloud-infrastructure", "artificial-intelligence"]
+    },
+    {
+      "slug": "developer-open-source",
+      "name": "Developer & Open Source",
+      "description": "Events for software engineers, APIs, developer tools, and open-source communities.",
+      "synonyms": ["developers", "API", "open source", "software engineering", "hackathon", "dev tools"],
+      "negative_signals": ["executive summit with no technical tracks"],
+      "related_tags": ["cloud-infrastructure", "artificial-intelligence"]
+    },
+    {
+      "slug": "fintech",
+      "name": "Fintech",
+      "description": "Events focused on financial technology: payments, digital banking, lending, insurtech, and wealthtech.",
+      "synonyms": ["payments", "neobank", "open banking", "digital lending", "insurtech", "wealthtech"],
+      "negative_signals": [
+        "generic finance keynote with no technology angle",
+        "private equity, private credit, or LP/GP conference",
+        "private markets or institutional fund manager gathering",
+        "alternative asset investing without payments/banking tech focus"
+      ],
+      "related_tags": ["regtech-compliance", "blockchain-web3", "tokenization"]
+    },
+    {
+      "slug": "blockchain-web3",
+      "name": "Blockchain & Web3",
+      "description": "Events about crypto ecosystems, DeFi, NFTs, and on-chain infrastructure.",
+      "synonyms": ["web3", "DeFi", "smart contracts", "crypto", "on-chain", "NFT"],
+      "negative_signals": ["single blockchain keynote at unrelated conference"],
+      "related_tags": ["bitcoin", "tokenization", "fintech"]
+    },
+    {
+      "slug": "bitcoin",
+      "name": "Bitcoin",
+      "description": "Bitcoin-specific events covering mining, Lightning Network, and BTC adoption.",
+      "synonyms": ["BTC", "Lightning Network", "Bitcoin mining", "satoshi", "Bitcoin-only"],
+      "negative_signals": ["general crypto event where Bitcoin is one of many topics"],
+      "related_tags": ["blockchain-web3"]
+    },
+    {
+      "slug": "tokenization",
+      "name": "Tokenization",
+      "description": "Events about asset tokenization, real-world assets (RWA), and digital securities.",
+      "synonyms": ["tokenized assets", "RWA", "digital securities", "asset tokenization", "security tokens"],
+      "negative_signals": ["NFT art event with no financial tokenization"],
+      "related_tags": ["blockchain-web3", "fintech", "regtech-compliance"]
+    },
+    {
+      "slug": "regtech-compliance",
+      "name": "RegTech & Compliance",
+      "description": "Events about regulatory technology, KYC/AML, compliance reporting, and governance.",
+      "synonyms": ["RegTech", "KYC", "AML", "compliance automation", "regulatory reporting", "governance"],
+      "negative_signals": ["brief compliance mention in fintech product demo"],
+      "related_tags": ["fintech", "legal-policy"]
+    },
+    {
+      "slug": "martech",
+      "name": "MarTech",
+      "description": "Events about marketing automation, CRM, attribution, and customer data platforms.",
+      "synonyms": ["martech", "marketing automation", "CDP", "marketing ops", "customer data platform", "attribution"],
+      "negative_signals": ["brand advertising festival with no marketing technology"],
+      "related_tags": ["adtech", "ecommerce-retail"]
+    },
+    {
+      "slug": "adtech",
+      "name": "AdTech",
+      "description": "Events about programmatic advertising, media buying, and advertising technology platforms.",
+      "synonyms": ["ad tech", "programmatic", "media buying", "DSP", "SSP", "advertising technology"],
+      "negative_signals": ["creative awards show with no ad technology"],
+      "related_tags": ["martech", "media-entertainment"]
+    },
+    {
+      "slug": "ecommerce-retail",
+      "name": "E-commerce & Retail",
+      "description": "Events about online retail, marketplaces, D2C brands, and retail technology.",
+      "synonyms": ["ecommerce", "e-commerce", "retail tech", "marketplace", "D2C", "omnichannel"],
+      "negative_signals": ["fashion week with no retail technology angle"],
+      "related_tags": ["martech", "supply-chain-logistics"]
+    },
+    {
+      "slug": "creator-influencer",
+      "name": "Creator & Influencer",
+      "description": "Events about the creator economy, social commerce, and influencer marketing.",
+      "synonyms": ["creator economy", "influencer", "UGC", "content creator", "social commerce"],
+      "negative_signals": ["traditional media conference with one creator panel"],
+      "related_tags": ["martech", "media-entertainment"]
+    },
+    {
+      "slug": "media-entertainment",
+      "name": "Media & Entertainment",
+      "description": "Events about streaming, gaming, content production, and sports media.",
+      "synonyms": ["streaming", "gaming", "entertainment", "content", "sports media", "OTT"],
+      "negative_signals": ["film festival with no media technology"],
+      "related_tags": ["adtech", "creator-influencer"]
+    },
+    {
+      "slug": "healthcare-life-sciences",
+      "name": "Healthcare & Life Sciences",
+      "description": "Events about healthtech, biotech, pharma, medtech, and digital health.",
+      "synonyms": ["healthtech", "digital health", "biotech", "pharma", "medtech", "life sciences"],
+      "negative_signals": ["wellness retreat with no healthcare technology"],
+      "related_tags": ["artificial-intelligence"]
+    },
+    {
+      "slug": "real-estate-proptech",
+      "name": "Real Estate & PropTech",
+      "description": "Events about property technology, construction tech, and smart buildings.",
+      "synonyms": ["proptech", "real estate tech", "construction tech", "smart buildings", "property management"],
+      "negative_signals": ["real estate investment networking with no technology"],
+      "related_tags": ["tokenization"]
+    },
+    {
+      "slug": "supply-chain-logistics",
+      "name": "Supply Chain & Logistics",
+      "description": "Events about freight, warehousing, trade, procurement, and supply chain technology.",
+      "synonyms": ["logistics", "supply chain", "last mile", "warehousing", "procurement", "freight"],
+      "negative_signals": ["shipping industry gala with no technology focus"],
+      "related_tags": ["ecommerce-retail", "mobility-automotive"]
+    },
+    {
+      "slug": "energy-sustainability",
+      "name": "Energy & Sustainability",
+      "description": "Events about clean energy, climate technology, ESG, and cleantech.",
+      "synonyms": ["cleantech", "renewables", "ESG", "climate tech", "solar", "wind energy", "sustainability"],
+      "negative_signals": ["corporate CSR report launch with no energy technology"],
+      "related_tags": ["mobility-automotive"]
+    },
+    {
+      "slug": "mobility-automotive",
+      "name": "Mobility & Automotive",
+      "description": "Events about electric vehicles, autonomous driving, transport, and automotive technology.",
+      "synonyms": ["EV", "electric vehicles", "autonomous", "mobility", "automotive tech", "self-driving"],
+      "negative_signals": ["classic car show with no technology angle"],
+      "related_tags": ["energy-sustainability", "artificial-intelligence"]
+    },
+    {
+      "slug": "aerospace-defense",
+      "name": "Aerospace & Defense",
+      "description": "Events about aviation, space technology, and defense technology.",
+      "synonyms": ["aerospace", "space tech", "defense", "aviation", "satellite", "defense tech"],
+      "negative_signals": ["air show with no technology or industry focus"],
+      "related_tags": ["artificial-intelligence", "mobility-automotive"]
+    },
+    {
+      "slug": "startups-venture",
+      "name": "Startups & Venture",
+      "description": "Events for founders, fundraising, venture capital, accelerators, and the startup ecosystem.",
+      "synonyms": ["startup", "VC", "venture capital", "founder", "pitch", "accelerator", "seed funding"],
+      "negative_signals": [
+        "enterprise conference with one startup pitch competition",
+        "private equity or LP/GP institutional investor conference",
+        "private markets or private capital gathering"
+      ],
+      "related_tags": ["fintech", "artificial-intelligence"]
+    },
+    {
+      "slug": "hr-future-of-work",
+      "name": "HR & Future of Work",
+      "description": "Events about talent management, workplace culture, HR technology, and leadership.",
+      "synonyms": ["HR tech", "future of work", "talent", "people ops", "workplace", "human resources"],
+      "negative_signals": ["generic leadership keynote at industry conference"],
+      "related_tags": ["saas-enterprise-software"]
+    },
+    {
+      "slug": "legal-policy",
+      "name": "Legal & Policy",
+      "description": "Events about law, regulation, public policy, government affairs, and legal technology.",
+      "synonyms": ["legal tech", "policy", "regulation", "government affairs", "public policy", "law"],
+      "negative_signals": ["compliance sidebar at fintech event"],
+      "related_tags": ["regtech-compliance"]
+    },
+    {
+      "slug": "education-edtech",
+      "name": "Education & EdTech",
+      "description": "Events about learning, universities, corporate training, and education technology.",
+      "synonyms": ["edtech", "higher ed", "L&D", "learning", "education technology", "e-learning"],
+      "negative_signals": ["academic conference with no education technology"],
+      "related_tags": ["artificial-intelligence", "hr-future-of-work"]
+    },
+    {
+      "slug": "diversity-inclusion",
+      "name": "Diversity & Inclusion",
+      "description": "Events primarily focused on DEI, inclusion, belonging, and equitable workplace practices.",
+      "synonyms": ["DEI", "diversity", "inclusion", "belonging", "equity", "inclusive workplace"],
+      "negative_signals": ["industry conference with one diversity panel"],
+      "related_tags": ["hr-future-of-work"]
+    }
+  ]
+}

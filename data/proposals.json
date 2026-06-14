@@ -1,0 +1,45 @@
+{
+  "proposals": [
+    {
+      "id": "6a3e1a29-5b7f-4407-9865-9904c45c5379",
+      "eventUrl": "https://informaconnect.com/superreturnasia/",
+      "suggestedName": "Private Capital",
+      "suggestedDescription": "Events focused on private equity, private credit, LP/GP relations, and other aspects of private capital markets.",
+      "suggestedSynonyms": [
+        "private equity",
+        "private markets",
+        "private credit",
+        "LP/GP",
+        "fund managers"
+      ],
+      "reason": "The event is primarily focused on private capital markets, including LP/GP relations, private credit, and venture capital, which are not covered by existing approved tags.",
+      "evidence": [],
+      "aiRecommendations": {
+        "primary_tags": [],
+        "secondary_tags": [],
+        "suggested_new_tag": {
+          "name": "Private Capital",
+          "confidence": 0.95,
+          "reason": "The event is primarily focused on private capital markets, including LP/GP relations, private credit, and venture capital, which are not covered by existing approved tags.",
+          "description": "Events focused on private equity, private credit, LP/GP relations, and other aspects of private capital markets.",
+          "synonyms": [
+            "private equity",
+            "private markets",
+            "private credit",
+            "LP/GP",
+            "fund managers"
+          ]
+        },
+        "overall_confidence": "high",
+        "summary": "SuperReturn Asia is a conference focused on private capital markets, including LP/GP relations, private credit, and venture capital. It does not fit into any existing approved tags and is best described by the suggested new tag 'Private Capital.'"
+      },
+      "staffNote": "",
+      "proposedBy": "staff",
+      "status": "rejected",
+      "reviewNote": "",
+      "mergedIntoSlug": null,
+      "createdAt": "2026-06-13T05:21:17.973Z",
+      "reviewedAt": "2026-06-13T10:45:10.915Z"
+    }
+  ]
+}
