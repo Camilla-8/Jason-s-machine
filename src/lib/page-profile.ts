@@ -21,6 +21,7 @@ export interface PageExtractionProfile {
   sponsorConfidence: number;
   exhibitorLayout: ExhibitorLayout;
   exhibitorConfidence: number;
+  sponsorSectionAnchored: boolean;
   sponsorProfileLinkCount: number;
   exhibitorProfileLinkCount: number;
   sponsorTierHeadingCount: number;
@@ -31,6 +32,7 @@ export interface PageExtractionProfile {
   hasSponsorSection: boolean;
   hasExhibitorSection: boolean;
   speakerNames: string[];
+  kolPartnerNames: string[];
   eventBrandingNames: string[];
 }
 
@@ -41,13 +43,18 @@ const NON_TIER_HEADING_PATTERN =
   /be a sponsor|become a sponsor|want to sponsor|why sponsor|join the sponsors|be an? sff|why singapore|real results|apply to|community partners?$|interested in raising|download sponsorship/i;
 
 const SPONSOR_SECTION_HEADING_PATTERN =
-  /^(#?\s*)?(our\s+\d{4}\s+)?sponsors?(\s+(&|and)\s+partners?)?$/i;
+  /^(#?\s*)?((our\s+)?\d{4}\s+)?sponsors?(\s+(&|and)\s+partners?)?$/i;
 
 const TIER_ONLY_HEADING_PATTERN =
-  /^(main|gold|silver|bronze|platinum|grand|principal|associate|supporter|media|co-?)\s*(sponsor|partner)s?$/i;
+  /^(main|gold|silver|bronze|platinum|grand|principal|associate|supporter|media|ecosystem|co-?)\s*(sponsor|partner)s?$/i;
 
 const STOP_SECTION_HEADING_PATTERN =
-  /^(#?\s*)?(tickets?|speakers?|testimonials?|attendee reviews|event schedule|our venue|faq|contact|blog|shop)$/i;
+  /^(#?\s*)?(tickets?|speakers?|thought\s+leaders|testimonials?|attendee reviews|key\s+themes|what\s+you\s+can\s+expect|why\s+turkiye|event schedule|our venue|gallery|join\s+us|kol\s+partners?|faq|contact|blog|shop)$/i;
+
+const NON_SPONSOR_TIER_HEADING_PATTERN = /\bkol\s+partners?\b/i;
+
+const SPEAKER_SECTION_HEADING_PATTERN =
+  /thought\s+leaders|all\s+speakers|featured\s+speakers?|keynote\s+speakers?|^#?\s*speakers?$/i;
 
 const TIER_LABEL_PATTERN =
   /^(grand|platinum|platinium|gold|silver|bronze|principal|associate|main|supporter|media|co-?)\s*(sponsor|partner)s?$/i;
@@ -81,7 +88,51 @@ function isTierHeading(text: string): boolean {
 
 function isSponsorSectionHeading(text: string): boolean {
   const normalized = normalizeHeading(text);
-  return SPONSOR_SECTION_HEADING_PATTERN.test(normalized) || /our\s+\d{4}\s+sponsors/i.test(normalized);
+  return (
+    SPONSOR_SECTION_HEADING_PATTERN.test(normalized) ||
+    /\bour\s+\d{4}\s+sponsors\b/i.test(normalized) ||
+    /\b20\d{2}\s+sponsors?\b/i.test(normalized)
+  );
+}
+
+function shouldStopSponsorCollection(heading: string): boolean {
+  const normalized = normalizeHeading(heading);
+  if (!normalized) return false;
+  return STOP_SECTION_HEADING_PATTERN.test(normalized) || NON_SPONSOR_TIER_HEADING_PATTERN.test(normalized);
+}
+
+export function isSponsorSectionAnchored(section: cheerio.Cheerio<Element>): boolean {
+  const cls = section.attr("class") ?? "";
+  return (
+    cls.includes("sponsor-range-root") ||
+    cls.includes("sponsor-sr-only-root") ||
+    cls.includes("sponsor-link-root")
+  );
+}
+
+export function getEffectiveImageUrl($img: cheerio.Cheerio<Element>): string {
+  const src = $img.attr("src") ?? "";
+  if (src && !/^data:image\/svg/i.test(src)) return src;
+
+  const lazySrc =
+    $img.attr("data-src") ??
+    $img.attr("data-lazy-src") ??
+    $img.attr("data-original") ??
+    "";
+  if (lazySrc && !/^data:image\/svg/i.test(lazySrc)) return lazySrc;
+
+  return src;
+}
+
+function findContainerForHeading(
+  $: cheerio.CheerioAPI,
+  heading: cheerio.Cheerio<Element>
+): cheerio.Cheerio<Element> {
+  for (const selector of ["section", ".e-parent", "[class*='e-con'][class*='e-parent']", "article", "main"]) {
+    const container = heading.closest(selector);
+    if (container.length > 0) return container.first() as cheerio.Cheerio<Element>;
+  }
+  return heading.parent() as cheerio.Cheerio<Element>;
 }
 
 export function isSponsorSectionHeadingText(text: string): boolean {
@@ -103,26 +154,38 @@ function countInformaTierBlocks($: cheerio.CheerioAPI): number {
 }
 
 export function findSponsorSection($: cheerio.CheerioAPI): cheerio.Cheerio<Element> {
-  const sectionHeading = $("h1, h2, h3, h4, h5, h6")
+  const sponsorHeadingCandidates = $("h1, h2, h3, h4, h5, h6")
     .filter((_, el) => isSponsorSectionHeading($(el).text()))
-    .first();
+    .toArray()
+    .sort((a, b) => {
+      const aText = normalizeHeading($(a).text());
+      const bText = normalizeHeading($(b).text());
+      const aScore = /\b20\d{2}\s+sponsors?\b/i.test(aText) ? 0 : /\bour\s+\d{4}\s+sponsors\b/i.test(aText) ? 1 : 2;
+      const bScore = /\b20\d{2}\s+sponsors?\b/i.test(bText) ? 0 : /\bour\s+\d{4}\s+sponsors\b/i.test(bText) ? 1 : 2;
+      return aScore - bScore;
+    });
+
+  const sectionHeading = sponsorHeadingCandidates[0] ? $(sponsorHeadingCandidates[0]) : $("nonexistent");
 
   if (sectionHeading.length > 0) {
-    const section = sectionHeading.closest("section, article, main");
-    if (section.length > 0) {
-      return collectSponsorSectionsFromAnchor($, section.first() as cheerio.Cheerio<Element>);
-    }
-
-    let node = sectionHeading.parent() as cheerio.Cheerio<Element>;
+    let node = findContainerForHeading($, sectionHeading);
     while (node.length > 0) {
       const profileLinks = node.find('a[href*="/sponsors/"]').length;
-      if (profileLinks >= 5) return node;
+      if (profileLinks >= 5 && !node.is("body") && !node.is("main")) {
+        const wrapper = $("<div class='sponsor-range-root'></div>");
+        wrapper.append(node.clone());
+        return wrapper as cheerio.Cheerio<Element>;
+      }
+      if (node.is("body") || node.is("main")) break;
       const parent = node.parent();
-      if (!parent.length || parent.prop("tagName")?.toLowerCase() === "body") break;
+      if (!parent.length) break;
       node = parent as cheerio.Cheerio<Element>;
     }
 
-    return $("body") as cheerio.Cheerio<Element>;
+    const container = findContainerForHeading($, sectionHeading);
+    if (!container.is("body") && !container.is("main")) {
+      return collectSponsorContainersFromAnchor($, container);
+    }
   }
 
   const srOnlyList = $("ul.sr-only")
@@ -152,23 +215,52 @@ export function findSponsorSection($: cheerio.CheerioAPI): cheerio.Cheerio<Eleme
     .first();
 
   if (tierHeading.length > 0) {
-    const tierSection = tierHeading.closest("section");
-    if (tierSection.length > 0) {
-      let startSection = tierSection as cheerio.Cheerio<Element>;
-      tierSection.prevAll("section").each((_, el) => {
-        const heading = normalizeHeading($(el).find("h1, h2, h3, h4").first().text());
-        if (isSponsorSectionHeading(heading)) {
-          startSection = $(el) as cheerio.Cheerio<Element>;
-        }
-      });
-      return collectSponsorSectionsFromAnchor($, startSection);
+    const tierContainer = findContainerForHeading($, tierHeading);
+    let startContainer = tierContainer;
+
+    tierContainer.prevAll(".e-parent, section").each((_, el) => {
+      const heading = normalizeHeading($(el).find("h1, h2, h3, h4").first().text());
+      if (isSponsorSectionHeading(heading)) {
+        startContainer = $(el) as cheerio.Cheerio<Element>;
+      }
+    });
+
+    if (!startContainer.is("body") && !startContainer.is("main")) {
+      return collectSponsorContainersFromAnchor($, startContainer);
     }
   }
 
-  const main = $("main").first();
-  if (main.length > 0) return main as cheerio.Cheerio<Element>;
+  return $("<div class='sponsor-section-unanchored'></div>") as cheerio.Cheerio<Element>;
+}
 
-  return $("body") as cheerio.Cheerio<Element>;
+function collectSponsorContainersFromAnchor(
+  $: cheerio.CheerioAPI,
+  anchor: cheerio.Cheerio<Element>
+): cheerio.Cheerio<Element> {
+  if (anchor.is("section") || anchor.closest("section").length > 0) {
+    return collectSponsorSectionsFromAnchor($, anchor);
+  }
+
+  const container = anchor.hasClass("e-parent") ? anchor : anchor.closest(".e-parent");
+  if (container.length === 0) {
+    const wrapper = $("<div class='sponsor-range-root'></div>");
+    wrapper.append(anchor.clone());
+    return wrapper as cheerio.Cheerio<Element>;
+  }
+
+  const collected = $("<div class='sponsor-range-root'></div>");
+  collected.append(container.clone());
+  let current = container;
+  while (current.length > 0) {
+    const next = current.next(".e-parent");
+    if (next.length === 0) break;
+    const heading = normalizeHeading(next.find("h1, h2, h3, h4").first().text());
+    if (shouldStopSponsorCollection(heading)) break;
+    collected.append(next.clone());
+    current = next;
+  }
+
+  return collected as cheerio.Cheerio<Element>;
 }
 
 function collectSponsorSectionsFromAnchor(
@@ -185,7 +277,7 @@ function collectSponsorSectionsFromAnchor(
     const next = current.next("section");
     if (next.length === 0) break;
     const heading = normalizeHeading(next.find("h1, h2, h3, h4").first().text());
-    if (STOP_SECTION_HEADING_PATTERN.test(heading)) break;
+    if (shouldStopSponsorCollection(heading)) break;
     collected.append(next.clone());
     current = next;
   }
@@ -207,20 +299,24 @@ export function findExhibitorSection($: cheerio.CheerioAPI): cheerio.Cheerio<Ele
 
 function countSponsorTextListItems($: cheerio.CheerioAPI, section: cheerio.Cheerio<Element>): number {
   let count = 0;
-  section.find("ul li, ol li").each((_, el) => {
-    const text = $(el).text().trim().replace(/\s+/g, " ");
-    if (text.length >= 2 && text.length <= 80 && !isTierHeading(text) && !TIER_LABEL_PATTERN.test(text)) {
-      count += 1;
-    }
-  });
+  section
+    .find("ul li, ol li")
+    .not("nav li, footer li, header li, [class*='menu'] li, [class*='nav'] li")
+    .each((_, el) => {
+      const text = $(el).text().trim().replace(/\s+/g, " ");
+      if (text.length >= 2 && text.length <= 80 && !isTierHeading(text) && !TIER_LABEL_PATTERN.test(text)) {
+        count += 1;
+      }
+    });
   return count;
 }
 
 function countSponsorSectionImages($: cheerio.CheerioAPI, section: cheerio.Cheerio<Element>): number {
   let count = 0;
-  section.find("img[src]").each((_, el) => {
-    const src = $(el).attr("src") ?? "";
+  section.find("img").each((_, el) => {
+    const src = getEffectiveImageUrl($(el));
     if (!src || /^data:image\/svg/i.test(src)) return;
+    if (/\bspeaker/i.test(src)) return;
     count += 1;
   });
   return count;
@@ -239,15 +335,42 @@ function countTierHeadingsInSection($: cheerio.CheerioAPI, section: cheerio.Chee
 
 function collectSpeakerNames($: cheerio.CheerioAPI): string[] {
   const names = new Set<string>();
-  const speakerRoot =
-    $("h1, h2, h3, h4")
-      .filter((_, el) => /^#?\s*speakers?$/i.test(normalizeHeading($(el).text())))
-      .first()
-      .closest("section, article, main") ?? $("body");
 
-  speakerRoot.find("h3, h4, h5, strong, [class*='speaker']").each((_, el) => {
-    const text = normalizeHeading($(el).text());
-    if (text.length >= 3 && text.length <= 80) names.add(text.toLowerCase());
+  $("h1, h2, h3, h4, h5, h6").each((_, el) => {
+    if (!SPEAKER_SECTION_HEADING_PATTERN.test(normalizeHeading($(el).text()))) return;
+
+    const root = $(el).closest(".e-parent, section, article, main");
+    const searchIn = root.length > 0 ? root : $(el).parent();
+
+    searchIn.find("h3, h4, h5, h6, strong, [class*='speaker']").each((_, nameEl) => {
+      const text = normalizeHeading($(nameEl).text());
+      if (text.length >= 3 && text.length <= 80) names.add(text.toLowerCase());
+    });
+  });
+
+  $(".ibw-speakers-wrapper img[alt], [class*='speaker'] img[alt]").each((_, el) => {
+    const alt = $(el).attr("alt")?.trim();
+    if (alt && alt.length >= 3 && alt.length <= 80) names.add(alt.toLowerCase());
+  });
+
+  return Array.from(names);
+}
+
+function collectKolPartnerNames($: cheerio.CheerioAPI): string[] {
+  const names = new Set<string>();
+
+  $("h1, h2, h3, h4, h5, h6").each((_, el) => {
+    if (!NON_SPONSOR_TIER_HEADING_PATTERN.test(normalizeHeading($(el).text()))) return;
+
+    const root = $(el).closest(".e-parent, section, article, main");
+    const searchIn = root.length > 0 ? root : $(el).parent();
+
+    searchIn.find("h4, h5, h6, strong, span").each((_, nameEl) => {
+      const text = normalizeHeading($(nameEl).text());
+      if (text.length >= 3 && text.length <= 80 && !isTierHeading(text)) {
+        names.add(text.toLowerCase());
+      }
+    });
   });
 
   return Array.from(names);
@@ -327,10 +450,24 @@ function chooseSponsorLayout(signals: {
   tierHeadings: number;
   sectionImages: number;
   hasSponsorSection: boolean;
+  sponsorSectionAnchored: boolean;
   pageType: ScrapedPageType;
 }): { layout: SponsorLayout; confidence: number } {
-  const { profileLinks, informaBlocks, textListItems, embeddedCount, tierHeadings, sectionImages, hasSponsorSection, pageType } =
-    signals;
+  const {
+    profileLinks,
+    informaBlocks,
+    textListItems,
+    embeddedCount,
+    tierHeadings,
+    sectionImages,
+    hasSponsorSection,
+    sponsorSectionAnchored,
+    pageType,
+  } = signals;
+
+  if (!sponsorSectionAnchored && profileLinks < 3) {
+    return { layout: "none_detected", confidence: 0.85 };
+  }
 
   if (profileLinks >= 8 || (profileLinks >= 3 && pageType === "sponsors")) {
     return { layout: "profile_listing", confidence: 0.95 };
@@ -397,6 +534,7 @@ export function analyzePageProfile(
   $("nav, footer, header, [role='navigation'], [role='banner']").remove();
 
   const sponsorSection = findSponsorSection($);
+  const sponsorSectionAnchored = isSponsorSectionAnchored(sponsorSection);
   const exhibitorSection = findExhibitorSection($);
 
   const sponsorProfileLinkCount = countProfileLinks(html, "sponsors");
@@ -413,10 +551,11 @@ export function analyzePageProfile(
     : 0;
 
   const hasSponsorSection =
-    sponsorTierHeadingCount > 0 ||
-    sponsorTextListCount >= 3 ||
-    sponsorSectionImageCount >= 2 ||
-    isSponsorSectionHeading(sponsorSection.find("h1, h2, h3, h4").first().text());
+    sponsorSectionAnchored &&
+    (sponsorTierHeadingCount > 0 ||
+      sponsorTextListCount >= 3 ||
+      sponsorSectionImageCount >= 2 ||
+      sponsorSection.find("h1, h2, h3, h4, h5, h6").filter((_, el) => isSponsorSectionHeading($(el).text())).length > 0);
 
   const hasExhibitorSection = exhibitorSection !== null || exhibitorProfileLinkCount >= 3;
 
@@ -428,6 +567,7 @@ export function analyzePageProfile(
     tierHeadings: sponsorTierHeadingCount,
     sectionImages: sponsorSectionImageCount,
     hasSponsorSection,
+    sponsorSectionAnchored,
     pageType,
   });
 
@@ -444,6 +584,7 @@ export function analyzePageProfile(
     sponsorConfidence: sponsorChoice.confidence,
     exhibitorLayout: exhibitorChoice.layout,
     exhibitorConfidence: exhibitorChoice.confidence,
+    sponsorSectionAnchored,
     sponsorProfileLinkCount,
     exhibitorProfileLinkCount,
     sponsorTierHeadingCount,
@@ -454,6 +595,7 @@ export function analyzePageProfile(
     hasSponsorSection,
     hasExhibitorSection,
     speakerNames: collectSpeakerNames($),
+    kolPartnerNames: collectKolPartnerNames($),
     eventBrandingNames: collectEventBrandingNames($, pageUrl),
   };
 }
@@ -463,7 +605,25 @@ export function isTierLabelName(name: string): boolean {
 }
 
 export function isLikelyFilenameNoise(name: string): boolean {
-  return /^[a-f0-9]{6,}$/i.test(name) || /^\d{3,}[a-z]?\d*$/i.test(name) || FILENAME_NOISE_PATTERN.test(name);
+  const normalized = name.trim();
+  return (
+    /^[a-f0-9]{6,}$/i.test(normalized) ||
+    /^\d{3,}[a-z]?\d*$/i.test(normalized) ||
+    FILENAME_NOISE_PATTERN.test(normalized) ||
+    /\bspeaker\b/i.test(normalized) ||
+    /^copy of\b/i.test(normalized) ||
+    /^frame[-\s]?\d/i.test(normalized) ||
+    /^image[-\s]?\d/i.test(normalized) ||
+    /^mask[-\s]?group/i.test(normalized) ||
+    /^button$/i.test(normalized) ||
+    /^ibw\d*/i.test(normalized) ||
+    /\be\d{8,}/i.test(normalized) ||
+    /\bscaled\b/i.test(normalized)
+  );
+}
+
+export function isNonSponsorTierLabel(label: string): boolean {
+  return NON_SPONSOR_TIER_HEADING_PATTERN.test(normalizeHeading(label));
 }
 
 export function nameFromImageSrc(src: string): string | null {
@@ -515,12 +675,13 @@ export function validateSponsorRows(
 ): OrganizationRow[] {
   if (rows.length === 0) return rows;
 
-  const speakerSet = new Set(profile.speakerNames);
+  const speakerSet = new Set([...profile.speakerNames, ...profile.kolPartnerNames]);
   const brandingSet = new Set(profile.eventBrandingNames);
 
   const filtered = rows.filter((row) => {
     const lower = row.name.toLowerCase();
     if (isTierLabelName(row.name)) return false;
+    if (isNonSponsorTierLabel(row.tierLabel)) return false;
     if (isLikelyFilenameNoise(row.name)) return false;
     if (speakerSet.has(lower)) return false;
     if (brandingSet.has(lower)) return false;

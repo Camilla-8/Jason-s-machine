@@ -4,7 +4,9 @@ import {
   analyzePageProfile,
   findExhibitorSection,
   findSponsorSection,
+  getEffectiveImageUrl,
   isLikelyFilenameNoise,
+  isNonSponsorTierLabel,
   isSponsorSectionHeadingText,
   isTierLabelName,
   nameFromExternalUrl,
@@ -704,7 +706,7 @@ function extractOrgFromLogo(
   const img = $(el);
   const alt = img.attr("alt")?.trim() ?? "";
   const parentLink = img.closest("a").attr("href");
-  const src = img.attr("src") ?? "";
+  const imageUrl = getEffectiveImageUrl(img);
 
   let name = cleanOrgName(alt) ?? cleanOrgName(img.attr("title") ?? "");
 
@@ -712,8 +714,8 @@ function extractOrgFromLogo(
     name = cleanOrgName(nameFromExternalUrl(parentLink, pageUrl) ?? "");
   }
 
-  if (!name && src) {
-    name = cleanOrgName(nameFromImageSrc(src) ?? "");
+  if (!name && imageUrl) {
+    name = cleanOrgName(nameFromImageSrc(imageUrl) ?? "");
   }
 
   if (!name && parentLink) {
@@ -721,6 +723,7 @@ function extractOrgFromLogo(
   }
 
   if (!name || isTierLabelName(name) || isLikelyFilenameNoise(name)) return null;
+  if (/\bspeaker\b/i.test(imageUrl)) return null;
 
   let website: string | null = null;
   if (parentLink) {
@@ -758,8 +761,13 @@ function extractSponsorsFromTextList(html: string, pageUrl: string): Organizatio
         !NON_TIER_HEADING_PATTERN.test(text) &&
         !isSponsorSectionHeadingText(text)
       ) {
-        currentTierLabel = text;
-        currentTierRank = tierRankFromLabel(text);
+        if (isNonSponsorTierLabel(text)) {
+          currentTierLabel = "Sponsor";
+          currentTierRank = 2;
+        } else {
+          currentTierLabel = text;
+          currentTierRank = tierRankFromLabel(text);
+        }
       }
       return;
     }
@@ -811,16 +819,23 @@ function extractSponsorsFromSectionLogos(html: string, pageUrl: string): Organiz
         !NON_TIER_HEADING_PATTERN.test(text) &&
         !isSponsorSectionHeadingText(text)
       ) {
-        currentTierLabel = text;
-        currentTierRank = tierRankFromLabel(text);
+        if (isNonSponsorTierLabel(text)) {
+          currentTierLabel = "Sponsor";
+          currentTierRank = 2;
+        } else {
+          currentTierLabel = text;
+          currentTierRank = tierRankFromLabel(text);
+        }
       }
       return;
     }
 
     if (tag !== "img") return;
 
-    const src = $(el).attr("src") ?? "";
-    if (!src || /^data:image\/svg/i.test(src)) return;
+    const imageUrl = getEffectiveImageUrl($(el));
+    if (!imageUrl || /^data:image\/svg/i.test(imageUrl)) return;
+    if (/\bspeaker\b/i.test(imageUrl)) return;
+    if (isNonSponsorTierLabel(currentTierLabel)) return;
 
     const row = extractOrgFromLogo($, el, pageUrl, currentTierRank, currentTierLabel);
     if (!row) return;
