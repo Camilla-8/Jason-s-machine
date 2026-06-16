@@ -11,7 +11,8 @@ const PAGE_PATTERNS: Array<{ pattern: RegExp; type: ScrapedPage["pageType"] }> =
 
 const MAX_PAGES = 12;
 const HTML_KEEP_TYPES: ScrapedPage["pageType"][] = ["homepage", "sponsors", "exhibitors", "about"];
-const MAX_HTML_LENGTH = 300000;
+const MAX_HTML_LENGTH = 700_000;
+const SPONSOR_SECTION_PATTERN = /\b20\d{2}\s+sponsors?\b|\bour\s+\d{4}\s+sponsors\b/i;
 const DEFAULT_CONTENT_LENGTH = 4000;
 const HIGH_SIGNAL_CONTENT_LENGTH = 7000;
 const FETCH_TIMEOUT_MS = 15000;
@@ -224,6 +225,21 @@ async function fetchPage(url: string): Promise<string | null> {
   }
 }
 
+function htmlForExtraction(fullHtml: string): string {
+  if (fullHtml.length <= MAX_HTML_LENGTH) {
+    return fullHtml;
+  }
+
+  const sponsorIdx = fullHtml.search(SPONSOR_SECTION_PATTERN);
+  if (sponsorIdx < 0) {
+    return fullHtml.slice(0, MAX_HTML_LENGTH);
+  }
+
+  const head = fullHtml.slice(0, Math.min(180_000, sponsorIdx));
+  const tail = fullHtml.slice(Math.max(0, sponsorIdx - 12_000));
+  return `${head}\n<!-- sponsor-extraction-tail -->\n${tail}`;
+}
+
 function pagePayload(
   url: string,
   pageType: ScrapedPage["pageType"],
@@ -235,7 +251,7 @@ function pagePayload(
     title: extracted.title,
     content: extracted.content,
     pageType,
-    html: HTML_KEEP_TYPES.includes(pageType) ? html.slice(0, MAX_HTML_LENGTH) : undefined,
+    html: HTML_KEEP_TYPES.includes(pageType) ? htmlForExtraction(html) : undefined,
   };
 }
 

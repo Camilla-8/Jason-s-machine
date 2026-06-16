@@ -691,18 +691,6 @@ export function validateSponsorRows(
 
   if (filtered.length === 0) return [];
 
-  const contaminationRate =
-    (rows.length - filtered.length) / Math.max(rows.length, 1);
-  if (contaminationRate > 0.5 && filtered.length < 3) return [];
-
-  if (
-    profile.sponsorTierHeadingCount >= 2 &&
-    filtered.length <= 2 &&
-    profile.sponsorLayout !== "profile_listing"
-  ) {
-    return [];
-  }
-
   return filtered;
 }
 

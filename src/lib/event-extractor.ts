@@ -1054,7 +1054,7 @@ export function extractEventData(pages: ScrapedPage[], eventUrl: string): RawShe
     }
   }
 
-  if (sponsorByKey.size < 55 && homepage?.html) {
+  if (homepage?.html) {
     for (const row of extractOrganizationsFromHtml(homepage.html, homepage.url, "sponsor", "homepage")) {
       addSponsorRow(row);
     }

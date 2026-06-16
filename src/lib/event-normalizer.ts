@@ -141,5 +141,9 @@ ${JSON.stringify(raw.exhibitors.slice(0, 80), null, 2)}`,
   const sponsors = filterToKnownOrgs(raw.sponsors, parsed.sponsors);
   const exhibitors = filterToKnownOrgs(raw.exhibitors, parsed.exhibitors);
 
-  return { eventDetails, sponsors, exhibitors };
+  return {
+    eventDetails,
+    sponsors: sponsors.length > 0 ? sponsors : raw.sponsors,
+    exhibitors: exhibitors.length > 0 ? exhibitors : raw.exhibitors,
+  };
 }
