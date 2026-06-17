@@ -604,6 +604,70 @@ export function isTierLabelName(name: string): boolean {
   return TIER_LABEL_PATTERN.test(name.trim()) || /^(sponsors?|exhibitors?|partners?)$/i.test(name.trim());
 }
 
+export function isWebflowCdnImageUrl(src: string): boolean {
+  return /website-files\.com|uploads-ssl\.webflow\.com|assets\.website-files/i.test(src);
+}
+
+function decodeFilenameToken(raw: string): string {
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    decoded = raw.replace(/%20/g, " ").replace(/%40/g, "@");
+  }
+  return decoded.replace(/\+/g, " ");
+}
+
+function stripCdnAssetIdPrefix(filename: string): string {
+  return filename
+    .replace(/^[a-f0-9]{24}[-_]/i, "")
+    .replace(/^[a-f0-9]{24}$/i, "");
+}
+
+function isOpaqueCdnAssetLabel(token: string): boolean {
+  const normalized = token.trim().replace(/\s+/g, " ");
+  if (normalized.length < 2) return true;
+
+  return (
+    /^group\s*[\d@()]/i.test(normalized) ||
+    /^group$/i.test(normalized) ||
+    /^rectangle\s*\d*/i.test(normalized) ||
+    /^rectangle$/i.test(normalized) ||
+    /^sponbg$/i.test(normalized) ||
+    /^christamas\s*logo$/i.test(normalized) ||
+    /^logo$/i.test(normalized) ||
+    /^placeholder/i.test(normalized) ||
+    /^dsc\d+/i.test(normalized) ||
+    /^vm\d+/i.test(normalized) ||
+    /^copie\s+de$/i.test(normalized) ||
+    /^footer$/i.test(normalized) ||
+    /^frame$/i.test(normalized) ||
+    /^vector$/i.test(normalized) ||
+    /^dinner$/i.test(normalized) ||
+    /^party$/i.test(normalized) ||
+    /^main\s+event$/i.test(normalized) ||
+    /^institutional\s+day$/i.test(normalized) ||
+    /^corporate\s+breakfast$/i.test(normalized) ||
+    /^(linkedin|youtube|instagram|telegram|facebook|twitter|x)$/i.test(normalized) ||
+    /whatapp/i.test(normalized) ||
+    /paris\s+blockchain\s+week/i.test(normalized) ||
+    /[@%]2x$/i.test(normalized) ||
+    /%\d{2}/.test(normalized) ||
+    /\b[a-f0-9]{20,}\b/i.test(normalized) ||
+    /^\d[\d\s().-]*$/.test(normalized)
+  );
+}
+
+function looksLikeCompanyName(name: string): boolean {
+  const normalized = name.trim();
+  if (normalized.length < 2 || isLikelyFilenameNoise(normalized) || isOpaqueCdnAssetLabel(normalized)) {
+    return false;
+  }
+  if (normalized.split(/\s+/).length > 4) return false;
+  if (/\.(com|io|net|org)$/i.test(normalized)) return false;
+  return true;
+}
+
 export function isLikelyFilenameNoise(name: string): boolean {
   const normalized = name.trim();
   return (
@@ -618,7 +682,11 @@ export function isLikelyFilenameNoise(name: string): boolean {
     /^button$/i.test(normalized) ||
     /^ibw\d*/i.test(normalized) ||
     /\be\d{8,}/i.test(normalized) ||
-    /\bscaled\b/i.test(normalized)
+    /\bscaled\b/i.test(normalized) ||
+    /[%]/.test(normalized) ||
+    /@2x$/i.test(normalized) ||
+    /\b[a-f0-9]{20,}\b/i.test(normalized) ||
+    isOpaqueCdnAssetLabel(normalized)
   );
 }
 
@@ -627,26 +695,35 @@ export function isNonSponsorTierLabel(label: string): boolean {
 }
 
 export function nameFromImageSrc(src: string): string | null {
-  const basename = src.split("/").pop()?.replace(/\?.*$/, "") ?? "";
-  if (!basename) return null;
+  const rawBasename = src.split("/").pop()?.replace(/\?.*$/, "") ?? "";
+  if (!rawBasename) return null;
+
+  const basename = decodeFilenameToken(rawBasename);
 
   let token = basename
     .replace(/-\d+x\d+(?=\.[a-z]+$)/i, "")
     .replace(/\.(png|jpe?g|svg|webp|gif)$/i, "")
     .replace(/^(wp-image-|attachment-)/i, "");
 
+  token = stripCdnAssetIdPrefix(token);
+
   token = token
     .replace(/[-_](?:logo|logotype|brand|white|black|blanco|colour|color|scaled|landscape|variable|light|attribution)(?:[-_]\d+)*/gi, "")
     .replace(/^(?:logo|logotype|brand)[-_]/i, "")
     .replace(/\b(?:blanco|scaled|landscape|variable|light|attribution|\d{2,})\b/gi, "")
+    .replace(/\s*\(\d+\)\s*$/i, "")
+    .replace(/@2x$/i, "")
     .replace(/[-_]+/g, " ")
     .trim();
 
   if (token.length < 2 || token.length > 80) return null;
   if (FILENAME_NOISE_PATTERN.test(token)) return null;
+  if (isOpaqueCdnAssetLabel(token)) return null;
+  if (isWebflowCdnImageUrl(src) && /^[a-f0-9]{20,}/i.test(token)) return null;
 
   return token
     .split(" ")
+    .filter((word) => word.length > 0 && !/^[a-f0-9]{20,}$/i.test(word))
     .filter(Boolean)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(" ");
@@ -690,6 +767,28 @@ export function validateSponsorRows(
   });
 
   if (filtered.length === 0) return [];
+
+  const qualityRows = filtered.filter((row) => looksLikeCompanyName(row.name));
+
+  if (profile.sponsorLayout === "section_logo_grid") {
+    const noiseRatio = (rows.length - qualityRows.length) / Math.max(rows.length, 1);
+    if (qualityRows.length < 3 && (noiseRatio > 0.35 || rows.length > 8)) {
+      return qualityRows;
+    }
+
+    const lowQualityCount = rows.filter(
+      (row) =>
+        isLikelyFilenameNoise(row.name) ||
+        isOpaqueCdnAssetLabel(row.name) ||
+        /\b[a-f0-9]{20,}\b/i.test(row.name) ||
+        /[%@]2x/i.test(row.name)
+    ).length;
+    if (rows.length >= 3 && lowQualityCount / rows.length > 0.6) {
+      return qualityRows.length >= 3 ? qualityRows : [];
+    }
+
+    return qualityRows.length > 0 ? qualityRows : [];
+  }
 
   return filtered;
 }

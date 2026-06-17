@@ -40,7 +40,7 @@ const TIER_HEADING_PATTERN =
   /grand|platinum|platinium|gold|silver|bronze|principal|associate|pavilion|exhibitor|co-?sponsors?|sponsors?|partners?|exhibitors?|media/i;
 
 const NON_TIER_HEADING_PATTERN =
-  /be a sponsor|become a sponsor|want to sponsor|why sponsor|join the sponsors|be an? sff|our \d{4}|why singapore|real results|apply to|community partners?$|interested in raising|download sponsorship|become a breakpoint/i;
+  /be a sponsor|become a sponsor|want to sponsor|why sponsor|join the sponsors|be an? sff|our \d{4}|why singapore|real results|apply to|community partners?$|interested in raising|download sponsorship|become a breakpoint|main conference|vip dinner|hackathon|institutional days?|corporate breakfast|closing party|official closing|side events?/i;
 
 const PROFILE_SPONSOR_MIN_COUNT = 8;
 
