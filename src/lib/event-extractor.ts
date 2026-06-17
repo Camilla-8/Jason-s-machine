@@ -6,11 +6,14 @@ import {
   findSponsorSection,
   getEffectiveImageUrl,
   isLikelyFilenameNoise,
+  isNonSponsorPartnerTierHeading,
   isNonSponsorTierLabel,
+  isSponsorEquivalentTierHeading,
   isSponsorSectionHeadingText,
   isTierLabelName,
   nameFromExternalUrl,
   nameFromImageSrc,
+  nameFromPartnerLogoFilename,
   validateExhibitorRows,
   validateSponsorRows,
 } from "./page-profile";
@@ -26,21 +29,27 @@ import { isCompanyWebsiteUrl } from "./org-website-resolver";
 const TIER_RANK_MAP: Record<string, number> = {
   grand: 1,
   principal: 1,
+  main: 1,
+  general: 1,
   platinum: 2,
   platinium: 2,
   gold: 3,
   silver: 4,
   bronze: 5,
-  associate: 6,
+  copper: 6,
+  associate: 7,
   pavilion: 1,
   exhibitor: 2,
 };
+
+const PARTNER_TIER_HEADING_SELECTOR =
+  "h1, h2, h3, h4, h5, h6, [class~='h1'], [class~='h2'], [class~='h3'], [class~='h4'], [class~='h5'], [class~='h6']";
 
 const TIER_HEADING_PATTERN =
   /grand|platinum|platinium|gold|silver|bronze|principal|associate|pavilion|exhibitor|co-?sponsors?|sponsors?|partners?|exhibitors?|media/i;
 
 const NON_TIER_HEADING_PATTERN =
-  /be a sponsor|become a sponsor|want to sponsor|why sponsor|join the sponsors|be an? sff|our \d{4}|why singapore|real results|apply to|community partners?$|interested in raising|download sponsorship|become a breakpoint|main conference|vip dinner|hackathon|institutional days?|corporate breakfast|closing party|official closing|side events?/i;
+  /be a sponsor|become a sponsor|want to sponsor|why sponsor|join the sponsors|be an? sff|our \d{4}|why singapore|real results|apply to|community partners?$|interested in raising|download sponsorship|become a breakpoint|main conference|vip dinner|hackathon|institutional days?|corporate breakfast|closing party|official closing|side events?|want to be a partner|do you also want to be a partner/i;
 
 const PROFILE_SPONSOR_MIN_COUNT = 8;
 
@@ -336,7 +345,7 @@ function preferSponsorDisplayName(
 
 function isPrimarySponsorsPage(url: string): boolean {
   try {
-    return /\/sponsors\/?$/i.test(new URL(url).pathname);
+    return /\/(sponsors|partners)\/?$/i.test(new URL(url).pathname);
   } catch {
     return false;
   }
@@ -798,6 +807,139 @@ function extractSponsorsFromTextList(html: string, pageUrl: string): Organizatio
   return rows;
 }
 
+function isPartnerTierMarker($: cheerio.CheerioAPI, el: Element): boolean {
+  const tag = el.tagName?.toLowerCase();
+  if (tag?.match(/^h[1-6]$/)) return true;
+  const cls = $(el).attr("class") ?? "";
+  return /\bh[1-6]\b/.test(cls);
+}
+
+function nameFromPartnerProse(text: string): string | null {
+  const normalized = text.trim().replace(/\s+/g, " ");
+  const match = normalized.match(
+    /^([A-Z][A-Za-z0-9&'.-]{1,40}?)\s+(?:is|are|was|were|provides|exists|offers|builds|deploys|has)\b/
+  );
+  if (!match) return null;
+  return cleanOrgName(match[1]);
+}
+
+function nameFromLinkTitle(title: string): string | null {
+  const match = title.match(/go to (?:website )?(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+)\./i);
+  if (!match) return null;
+  const label = match[1];
+  if (label.length < 3) return null;
+  return label.charAt(0).toUpperCase() + label.slice(1).toLowerCase();
+}
+
+function extractSponsorsFromPartnerTierBlocks(html: string, pageUrl: string): OrganizationRow[] {
+  const $ = cheerio.load(html);
+  $("nav, footer, header, [role='navigation'], [role='banner']").remove();
+
+  const section = findSponsorSection($);
+  const rows: OrganizationRow[] = [];
+  const seen = new Set<string>();
+  let currentTierLabel = "Partner";
+  let currentTierRank = 2;
+  let skipTier = false;
+  let stopped = false;
+
+  const pushRow = (name: string, website: string | null): void => {
+    if (skipTier || stopped) return;
+    const cleaned = cleanOrgName(name);
+    if (!cleaned || isTierLabelName(cleaned) || isLikelyFilenameNoise(cleaned)) return;
+    const key = cleaned.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    rows.push({
+      tierRank: currentTierRank,
+      tierLabel: currentTierLabel,
+      name: cleaned,
+      website,
+    });
+  };
+
+  section.find(`${PARTNER_TIER_HEADING_SELECTOR}, img, a[href], p`).each((_, el) => {
+    if (stopped) return;
+
+    const $el = $(el);
+    const tag = el.tagName?.toLowerCase();
+
+    if (isPartnerTierMarker($, el)) {
+      const text = $el.text().trim().replace(/\s+/g, " ");
+      if (!text || text.length >= 80) return;
+
+      if (/do you also want to be a partner|want to be a partner/i.test(text)) {
+        stopped = true;
+        return;
+      }
+
+      if (isNonSponsorPartnerTierHeading(text) || /^friends?$/i.test(text)) {
+        skipTier = true;
+        return;
+      }
+
+      if (
+        isSponsorEquivalentTierHeading(text) ||
+        (TIER_HEADING_PATTERN.test(text) &&
+          !NON_TIER_HEADING_PATTERN.test(text) &&
+          !isSponsorSectionHeadingText(text))
+      ) {
+        skipTier = false;
+        currentTierLabel = text;
+        currentTierRank = tierRankFromLabel(text);
+      }
+      return;
+    }
+
+    if (skipTier || stopped) return;
+
+    if (tag === "p") {
+      const proseName = nameFromPartnerProse($el.text());
+      if (proseName) pushRow(proseName, null);
+      return;
+    }
+
+    if (tag === "img") {
+      const imageUrl = getEffectiveImageUrl($el);
+      if (!imageUrl || /^data:image\/svg/i.test(imageUrl) || /\bspeaker\b/i.test(imageUrl)) return;
+
+      const filenameName = nameFromPartnerLogoFilename(imageUrl);
+      if (filenameName) {
+        const parentHref = $el.closest("a").attr("href");
+        const resolved = parentHref ? resolveUrl(pageUrl, parentHref) : null;
+        const website =
+          resolved && isCompanyWebsiteCandidate(resolved, pageUrl) ? resolved : null;
+        pushRow(filenameName, website);
+        return;
+      }
+
+      const row = extractOrgFromLogo($, el, pageUrl, currentTierRank, currentTierLabel);
+      if (row) pushRow(row.name, row.website);
+      return;
+    }
+
+    if (tag === "a") {
+      if ($el.find("img").length > 0) return;
+
+      const href = $el.attr("href") ?? "";
+      if (!href || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:")) {
+        return;
+      }
+
+      const resolved = resolveUrl(pageUrl, href);
+      if (!resolved || !isCompanyWebsiteCandidate(resolved, pageUrl)) return;
+
+      const name =
+        cleanOrgName($el.text().replace(/\s+/g, " ").trim()) ??
+        nameFromLinkTitle($el.attr("title") ?? "") ??
+        nameFromExternalUrl(href, pageUrl);
+      if (name) pushRow(name, resolved);
+    }
+  });
+
+  return rows;
+}
+
 function extractSponsorsFromSectionLogos(html: string, pageUrl: string): OrganizationRow[] {
   const $ = cheerio.load(html);
   $("nav, footer, header, [role='navigation'], [role='banner']").remove();
@@ -910,6 +1052,9 @@ function extractSponsorsFromPage(html: string, pageUrl: string, pageType: Scrape
     case "informa_tier_blocks":
       rows = extractSponsorsFromTierSections(html, pageUrl);
       if (rows.length === 0) rows = extractSponsorsFromProfileLinks(html, pageUrl);
+      break;
+    case "partner_tier_blocks":
+      rows = extractSponsorsFromPartnerTierBlocks(html, pageUrl);
       break;
     case "text_list":
       rows = extractSponsorsFromTextList(html, pageUrl);

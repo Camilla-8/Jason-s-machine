@@ -5,6 +5,7 @@ import type { OrganizationRow, ScrapedPageType } from "./types";
 export type SponsorLayout =
   | "profile_listing"
   | "informa_tier_blocks"
+  | "partner_tier_blocks"
   | "section_logo_grid"
   | "text_list"
   | "embedded_json"
@@ -45,19 +46,33 @@ const NON_TIER_HEADING_PATTERN =
 const SPONSOR_SECTION_HEADING_PATTERN =
   /^(#?\s*)?((our\s+)?\d{4}\s+)?sponsors?(\s+(&|and)\s+partners?)?$/i;
 
+const PARTNERS_PAGE_HEADING_PATTERN = /^(#?\s*)?partners?$/i;
+
 const TIER_ONLY_HEADING_PATTERN =
-  /^(main|gold|silver|bronze|platinum|grand|principal|associate|supporter|media|ecosystem|co-?)\s*(sponsor|partner)s?$/i;
+  /^(main|general|gold|silver|bronze|copper|platinum|grand|principal|associate|supporter|media|co-?)\s*(sponsor|partner)s?$/i;
+
+const SPONSOR_EQUIVALENT_TIER_PATTERN =
+  /^(main|general|gold|silver|bronze|copper|platinum|grand|principal|associate|supporter|media|co-?)\s*(sponsor|partner)s?$/i;
+
+const NON_SPONSOR_PARTNER_TIER_PATTERN =
+  /\b(kol|community|friends?|ambassadors?|influencers?|travel|hotel|ecosystem|product|strategic)\s+partners?\b/i;
 
 const STOP_SECTION_HEADING_PATTERN =
-  /^(#?\s*)?(tickets?|speakers?|thought\s+leaders|testimonials?|attendee reviews|key\s+themes|what\s+you\s+can\s+expect|why\s+turkiye|event schedule|our venue|gallery|join\s+us|kol\s+partners?|faq|contact|blog|shop)$/i;
+  /^(#?\s*)?(tickets?|speakers?|thought\s+leaders|testimonials?|attendee reviews|key\s+themes|what\s+you\s+can\s+expect|why\s+turkiye|event schedule|our venue|gallery|join\s+us|kol\s+partners?|do you also want to be a partner|want to be a partner|faq|contact|blog|shop)$/i;
 
-const NON_SPONSOR_TIER_HEADING_PATTERN = /\bkol\s+partners?\b/i;
+const NON_SPONSOR_TIER_HEADING_PATTERN = NON_SPONSOR_PARTNER_TIER_PATTERN;
+
+const TIER_HEADING_SELECTOR =
+  "h1, h2, h3, h4, h5, h6, [class~='h1'], [class~='h2'], [class~='h3'], [class~='h4'], [class~='h5'], [class~='h6']";
 
 const SPEAKER_SECTION_HEADING_PATTERN =
   /thought\s+leaders|all\s+speakers|featured\s+speakers?|keynote\s+speakers?|^#?\s*speakers?$/i;
 
 const TIER_LABEL_PATTERN =
-  /^(grand|platinum|platinium|gold|silver|bronze|principal|associate|main|supporter|media|co-?)\s*(sponsor|partner)s?$/i;
+  /^(grand|platinum|platinium|gold|silver|bronze|copper|principal|associate|main|general|supporter|media|co-?)\s*(sponsor|partner)s?$/i;
+
+const PARTNER_LOGO_FILENAME_PATTERN =
+  /(?:^|[_-])(general|gold|silver|bronze|copper)[_-]([a-z0-9][a-z0-9&'.-]*?)[_-](?:black|white|blanco)(?:\.|$)/i;
 
 const FILENAME_NOISE_PATTERN =
   /^(logo|banner|icon|image|placeholder|avatar|white|black|blanco|scaled|landscape|variable|light|colour|color|securities|attribution|en)$/i;
@@ -90,8 +105,38 @@ function isSponsorSectionHeading(text: string): boolean {
   const normalized = normalizeHeading(text);
   return (
     SPONSOR_SECTION_HEADING_PATTERN.test(normalized) ||
-    /\bour\s+\d{4}\s+sponsors\b/i.test(normalized) ||
-    /\b20\d{2}\s+sponsors?\b/i.test(normalized)
+    PARTNERS_PAGE_HEADING_PATTERN.test(normalized) ||
+    /\bpartners?\s+and\s+exhibitors?\b/i.test(normalized) ||
+    /\bour\s+\d{4}\s+sponsors?\b/i.test(normalized) ||
+    /\bour\s+\d{4}\s+partners?\b/i.test(normalized) ||
+    /\b20\d{2}\s+sponsors?\b/i.test(normalized) ||
+    /\b20\d{2}\s+partners?\b/i.test(normalized)
+  );
+}
+
+export function isSponsorEquivalentTierHeading(text: string): boolean {
+  const normalized = normalizeHeading(text);
+  if (!normalized || isSponsorSectionHeading(normalized)) return false;
+  if (NON_SPONSOR_PARTNER_TIER_PATTERN.test(normalized)) return false;
+  if (NON_TIER_HEADING_PATTERN.test(normalized)) return false;
+  return SPONSOR_EQUIVALENT_TIER_PATTERN.test(normalized);
+}
+
+export function isNonSponsorPartnerTierHeading(text: string): boolean {
+  return NON_SPONSOR_PARTNER_TIER_PATTERN.test(normalizeHeading(text));
+}
+
+function tierHeadingText($: cheerio.CheerioAPI, el: Element): string {
+  return normalizeHeading($(el).text());
+}
+
+function isTierHeadingElement($: cheerio.CheerioAPI, el: Element): boolean {
+  const text = tierHeadingText($, el);
+  if (!text || text.length >= 80) return false;
+  if (isSponsorSectionHeading(text)) return false;
+  return (
+    TIER_ONLY_HEADING_PATTERN.test(text) ||
+    (isTierHeading(text) && !NON_TIER_HEADING_PATTERN.test(text))
   );
 }
 
@@ -210,8 +255,8 @@ export function findSponsorSection($: cheerio.CheerioAPI): cheerio.Cheerio<Eleme
     return wrapper as cheerio.Cheerio<Element>;
   }
 
-  const tierHeading = $("h1, h2, h3, h4, h5, h6")
-    .filter((_, el) => TIER_ONLY_HEADING_PATTERN.test(normalizeHeading($(el).text())))
+  const tierHeading = $(TIER_HEADING_SELECTOR)
+    .filter((_, el) => isTierHeadingElement($, el) && isSponsorEquivalentTierHeading(tierHeadingText($, el)))
     .first();
 
   if (tierHeading.length > 0) {
@@ -324,11 +369,20 @@ function countSponsorSectionImages($: cheerio.CheerioAPI, section: cheerio.Cheer
 
 function countTierHeadingsInSection($: cheerio.CheerioAPI, section: cheerio.Cheerio<Element>): number {
   let count = 0;
-  section.find("h1, h2, h3, h4, h5, h6").each((_, el) => {
-    const text = normalizeHeading($(el).text());
-    if (TIER_ONLY_HEADING_PATTERN.test(text) || (isTierHeading(text) && !isSponsorSectionHeading(text))) {
+  section.find(TIER_HEADING_SELECTOR).each((_, el) => {
+    const text = tierHeadingText($, el);
+    if (isTierHeadingElement($, el)) {
       count += 1;
     }
+  });
+  return count;
+}
+
+function countPartnerLogoFilenameMatches($: cheerio.CheerioAPI, section: cheerio.Cheerio<Element>): number {
+  let count = 0;
+  section.find("img").each((_, el) => {
+    const src = getEffectiveImageUrl($(el));
+    if (src && nameFromPartnerLogoFilename(src)) count += 1;
   });
   return count;
 }
@@ -359,15 +413,19 @@ function collectSpeakerNames($: cheerio.CheerioAPI): string[] {
 function collectKolPartnerNames($: cheerio.CheerioAPI): string[] {
   const names = new Set<string>();
 
-  $("h1, h2, h3, h4, h5, h6").each((_, el) => {
-    if (!NON_SPONSOR_TIER_HEADING_PATTERN.test(normalizeHeading($(el).text()))) return;
+  $(TIER_HEADING_SELECTOR).each((_, el) => {
+    if (!isNonSponsorPartnerTierHeading(tierHeadingText($, el))) return;
 
     const root = $(el).closest(".e-parent, section, article, main");
     const searchIn = root.length > 0 ? root : $(el).parent();
 
-    searchIn.find("h4, h5, h6, strong, span").each((_, nameEl) => {
-      const text = normalizeHeading($(nameEl).text());
-      if (text.length >= 3 && text.length <= 80 && !isTierHeading(text)) {
+    searchIn.find("h4, h5, h6, strong, span, img[alt]").each((_, nameEl) => {
+      const tag = nameEl.tagName?.toLowerCase();
+      const text =
+        tag === "img"
+          ? $(nameEl).attr("alt")?.trim() ?? ""
+          : normalizeHeading($(nameEl).text());
+      if (text.length >= 3 && text.length <= 80 && !isTierHeading(text) && !isTierLabelName(text)) {
         names.add(text.toLowerCase());
       }
     });
@@ -449,6 +507,7 @@ function chooseSponsorLayout(signals: {
   embeddedCount: number;
   tierHeadings: number;
   sectionImages: number;
+  partnerLogoFilenameMatches: number;
   hasSponsorSection: boolean;
   sponsorSectionAnchored: boolean;
   pageType: ScrapedPageType;
@@ -460,6 +519,7 @@ function chooseSponsorLayout(signals: {
     embeddedCount,
     tierHeadings,
     sectionImages,
+    partnerLogoFilenameMatches,
     hasSponsorSection,
     sponsorSectionAnchored,
     pageType,
@@ -480,6 +540,14 @@ function chooseSponsorLayout(signals: {
   }
   if (textListItems >= 3) {
     return { layout: "text_list", confidence: 0.85 };
+  }
+  if (
+    hasSponsorSection &&
+    tierHeadings >= 1 &&
+    partnerLogoFilenameMatches >= 5 &&
+    profileLinks < 5
+  ) {
+    return { layout: "partner_tier_blocks", confidence: 0.9 };
   }
   if (hasSponsorSection && tierHeadings >= 1 && sectionImages >= 2) {
     return { layout: "section_logo_grid", confidence: 0.8 };
@@ -543,6 +611,7 @@ export function analyzePageProfile(
   const sponsorTextListCount = countSponsorTextListItems($, sponsorSection);
   const sponsorSectionImageCount = countSponsorSectionImages($, sponsorSection);
   const sponsorTierHeadingCount = countTierHeadingsInSection($, sponsorSection);
+  const partnerLogoFilenameMatches = countPartnerLogoFilenameMatches($, sponsorSection);
   const embeddedSponsorCount = countEmbeddedSponsors(html);
   const publicityForms = (html.match(/-Publicity Form/gi) ?? []).length;
 
@@ -566,6 +635,7 @@ export function analyzePageProfile(
     embeddedCount: embeddedSponsorCount,
     tierHeadings: sponsorTierHeadingCount,
     sectionImages: sponsorSectionImageCount,
+    partnerLogoFilenameMatches,
     hasSponsorSection,
     sponsorSectionAnchored,
     pageType,
@@ -674,6 +744,8 @@ export function isLikelyFilenameNoise(name: string): boolean {
     /^[a-f0-9]{6,}$/i.test(normalized) ||
     /^\d{3,}[a-z]?\d*$/i.test(normalized) ||
     FILENAME_NOISE_PATTERN.test(normalized) ||
+    /^(general|gold|silver|bronze|copper)\s+partner$/i.test(normalized) ||
+    /^logo\s+partner$/i.test(normalized) ||
     /\bspeaker\b/i.test(normalized) ||
     /^copy of\b/i.test(normalized) ||
     /^frame[-\s]?\d/i.test(normalized) ||
@@ -691,7 +763,44 @@ export function isLikelyFilenameNoise(name: string): boolean {
 }
 
 export function isNonSponsorTierLabel(label: string): boolean {
-  return NON_SPONSOR_TIER_HEADING_PATTERN.test(normalizeHeading(label));
+  return (
+    NON_SPONSOR_PARTNER_TIER_PATTERN.test(normalizeHeading(label)) ||
+    /^friends?$/i.test(normalizeHeading(label))
+  );
+}
+
+function formatPartnerCompanyToken(raw: string): string {
+  const spaced = raw
+    .replace(/_/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (spaced.length < 2) return spaced;
+
+  return spaced
+    .split(" ")
+    .map((word) => {
+      if (word.length <= 4 && word === word.toUpperCase()) return word;
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(" ");
+}
+
+export function nameFromPartnerLogoFilename(src: string): string | null {
+  const rawBasename = src.split("/").pop()?.replace(/\?.*$/, "") ?? "";
+  if (!rawBasename) return null;
+
+  const basename = decodeFilenameToken(rawBasename).replace(/\.(png|jpe?g|svg|webp|gif)$/i, "");
+  const match = basename.match(PARTNER_LOGO_FILENAME_PATTERN);
+  if (!match) return null;
+
+  const companyRaw = match[2]?.trim() ?? "";
+  if (companyRaw.length < 2 || companyRaw.length > 60) return null;
+  if (/^(btcprague|partner|logos|v\d+|\d{4})$/i.test(companyRaw)) return null;
+
+  const formatted = formatPartnerCompanyToken(companyRaw);
+  if (!looksLikeCompanyName(formatted)) return null;
+  return formatted;
 }
 
 export function nameFromImageSrc(src: string): string | null {
@@ -770,7 +879,11 @@ export function validateSponsorRows(
 
   const qualityRows = filtered.filter((row) => looksLikeCompanyName(row.name));
 
-  if (profile.sponsorLayout === "section_logo_grid") {
+  if (profile.sponsorLayout === "partner_tier_blocks" && qualityRows.length >= 3) {
+    return qualityRows;
+  }
+
+  if (profile.sponsorLayout === "section_logo_grid" || profile.sponsorLayout === "partner_tier_blocks") {
     const noiseRatio = (rows.length - qualityRows.length) / Math.max(rows.length, 1);
     if (qualityRows.length < 3 && (noiseRatio > 0.35 || rows.length > 8)) {
       return qualityRows;
@@ -812,4 +925,33 @@ export function validateExhibitorRows(
     if (/^(home|about|contact|blog|shop|events)$/i.test(row.name)) return false;
     return true;
   });
+}
+
+export function hasDedicatedPartnerOrSponsorListing(html: string): boolean {
+  if (countSponsorProfileLinksInHtml(html) >= 3) return true;
+  if (/<ul[^>]*class="[^"]*sr-only/i.test(html) && /<li>[^<]{2,}/i.test(html)) return true;
+  if (/our\s+\d{4}\s+sponsors?/i.test(html) && countSponsorProfileLinksInHtml(html) >= 1) return true;
+
+  const $ = cheerio.load(html);
+  $("nav, footer, header").remove();
+  const tierHeadings = $(TIER_HEADING_SELECTOR).filter((_, el) => {
+    const text = tierHeadingText($, el);
+    return isSponsorEquivalentTierHeading(text) || TIER_ONLY_HEADING_PATTERN.test(text);
+  }).length;
+  const partnerLogos = $("img").filter((_, el) => {
+    const src = getEffectiveImageUrl($(el));
+    return Boolean(src && nameFromPartnerLogoFilename(src));
+  }).length;
+
+  return tierHeadings >= 1 && partnerLogos >= 5;
+}
+
+function countSponsorProfileLinksInHtml(html: string): number {
+  const $ = cheerio.load(html);
+  let count = 0;
+  $("a[href]").each((_, el) => {
+    const href = $(el).attr("href") ?? "";
+    if (/\/sponsors\/[^/?#]+/.test(href)) count += 1;
+  });
+  return count;
 }

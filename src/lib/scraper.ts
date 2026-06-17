@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import { hasDedicatedPartnerOrSponsorListing } from "./page-profile";
 import type { ScrapedPage } from "./types";
 
 const PAGE_PATTERNS: Array<{ pattern: RegExp; type: ScrapedPage["pageType"] }> = [
@@ -312,10 +313,7 @@ function countSponsorProfileLinks(html: string): number {
 }
 
 function hasDedicatedSponsorHtml(html: string): boolean {
-  if (countSponsorProfileLinks(html) >= 3) return true;
-  if (/<ul[^>]*class="[^"]*sr-only/i.test(html) && /<li>[^<]{2,}/i.test(html)) return true;
-  if (/our\s+\d{4}\s+sponsors/i.test(html) && countSponsorProfileLinks(html) >= 1) return true;
-  return false;
+  return hasDedicatedPartnerOrSponsorListing(html);
 }
 
 async function ensureSponsorListingPage(
