@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { ScanResult, Tag, ApiErrorCode } from "@/lib/types";
+import { normalizeEventUrlInput } from "@/lib/normalize-url";
 import { getErrorMessage } from "@/lib/error-message";
 import { copyToClipboard } from "@/lib/sheets-tsv";
 
@@ -85,11 +86,13 @@ export default function HomePage() {
     const timeout = setTimeout(() => controller.abort(), 90000);
 
     try {
+      const normalizedUrl = normalizeEventUrlInput(url);
+      setUrl(normalizedUrl);
       setPhase("analyzing");
       const res = await fetch("/api/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url: normalizedUrl }),
         signal: controller.signal,
       });
 
@@ -163,9 +166,9 @@ export default function HomePage() {
           className="mt-6 flex gap-3"
         >
           <input
-            type="url"
+            type="text"
             required
-            placeholder="https://example-event.com"
+            placeholder="gitex.com or https://example-event.com"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             className="flex-1 rounded-lg border border-stone-300 px-4 py-2.5 text-sm focus:border-stone-500 focus:outline-none focus:ring-2 focus:ring-stone-200"

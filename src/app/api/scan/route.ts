@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ingestEventContent } from "@/lib/event-ingest";
 import { classifyEvent } from "@/lib/classifier";
 import { toFriendlyApiError } from "@/lib/api-errors";
+import { normalizeEventUrlInput } from "@/lib/normalize-url";
 import { queueSuggestedTagFromScan } from "@/lib/proposals";
 import type { ClassificationResult, ScanResult } from "@/lib/types";
 
@@ -18,11 +19,7 @@ function formatTopics(classification: ClassificationResult): string {
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as { url?: string };
-    const url = body.url?.trim();
-
-    if (!url) {
-      return NextResponse.json({ error: "URL is required." }, { status: 400 });
-    }
+    const url = normalizeEventUrlInput(body.url ?? "");
 
     const { pages, source, sourceNote, sourceWarning } = await ingestEventContent(url);
     const classification = await classifyEvent(pages, url, { source });

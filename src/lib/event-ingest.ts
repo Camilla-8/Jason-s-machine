@@ -7,6 +7,7 @@ import {
   tavilyFallbackWarning,
 } from "./web-search-fallback";
 import { eventUrlVariants } from "./url-variants";
+import { normalizeEventUrlInput } from "./normalize-url";
 import type { ScanSource, ScrapedPage } from "./types";
 
 export interface EventIngestResult {
@@ -68,14 +69,9 @@ async function fetchViaWebSearch(eventUrl: string): Promise<{
 }
 
 export async function ingestEventContent(eventUrl: string): Promise<EventIngestResult> {
-  try {
-    new URL(eventUrl);
-  } catch {
-    throw new Error("Invalid URL. Please enter a valid event website URL.");
-  }
+  const normalizedUrl = normalizeEventUrlInput(eventUrl);
 
-  const normalizedInput = eventUrl.replace(/\/$/, "");
-  const variants = eventUrlVariants(eventUrl);
+  const variants = eventUrlVariants(normalizedUrl);
 
   for (const candidate of variants) {
     const result = await attemptScrapeEventSite(candidate);
@@ -84,7 +80,7 @@ export async function ingestEventContent(eventUrl: string): Promise<EventIngestR
         pages: result.pages,
         source: "direct",
         sourceNote:
-          candidate !== normalizedInput ? `Read via alternate URL: ${candidate}` : undefined,
+          candidate !== normalizedUrl ? `Read via alternate URL: ${candidate}` : undefined,
       };
     }
 
@@ -93,7 +89,7 @@ export async function ingestEventContent(eventUrl: string): Promise<EventIngestR
     }
   }
 
-  const webSearch = await fetchViaWebSearch(eventUrl);
+  const webSearch = await fetchViaWebSearch(normalizedUrl);
   return {
     pages: webSearch.pages,
     source: webSearch.source,
