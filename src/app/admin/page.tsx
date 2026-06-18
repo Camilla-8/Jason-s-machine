@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import type { Tag, TagProposal } from "@/lib/types";
 
@@ -77,9 +78,17 @@ export default function AdminPage() {
     <div className="space-y-8">
       <section>
         <h1 className="text-2xl font-semibold tracking-tight">Admin — Tag proposals</h1>
+        <p className="mt-3 rounded-lg border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-700">
+          <span className="font-medium text-stone-900">Management approval only.</span> Use this
+          page to review and approve new dictionary tags. To classify an event, use{" "}
+          <Link href="/" className="font-medium text-stone-900 underline">
+            Scan Event
+          </Link>
+          .
+        </p>
         <p className="mt-2 text-stone-600">
-          Review tag suggestions auto-queued from scans. Approve new tags to add them to the
-          dictionary, merge into an existing tag, or reject.
+          Tag suggestions are auto-queued from scans. Approve new tags to add them to the dictionary,
+          merge into an existing tag, or reject.
         </p>
       </section>
 

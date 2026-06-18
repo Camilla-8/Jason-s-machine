@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SiteNav } from "@/components/site-nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -19,17 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </Link>
               <p className="text-sm text-stone-500">Internal event topic classifier</p>
             </div>
-            <nav className="flex items-center gap-4 text-sm">
-              <Link href="/" className="font-medium text-stone-700 hover:text-stone-900">
-                Scan Event
-              </Link>
-              <Link
-                href="/admin"
-                className="rounded-md bg-stone-900 px-3 py-1.5 font-medium text-white hover:bg-stone-800"
-              >
-                Admin
-              </Link>
-            </nav>
+            <SiteNav />
           </div>
         </header>
         <main className="mx-auto max-w-5xl px-6 py-8">{children}</main>
