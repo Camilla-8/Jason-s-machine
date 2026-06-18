@@ -64,7 +64,7 @@ async function fetchViaWebSearch(eventUrl: string): Promise<{
     source: "web_search_openai",
     sourceNote: BLOCKED_OPENAI_NOTE,
     sourceWarning:
-      "Tavily is not configured — classified using OpenAI web search instead. Add TAVILY_API_KEY for the primary search fallback.",
+      "Tavily is not configured — classified using OpenAI web search instead. Add TAVILY_API_KEY to .env.local and restart the dev server.",
   };
 }
 

@@ -52,6 +52,11 @@ export default function HomePage() {
   const [result, setResult] = useState<ScanResult | null>(null);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const [dictionaryTags, setDictionaryTags] = useState<Tag[]>([]);
+  const [envStatus, setEnvStatus] = useState<{
+    openai: boolean;
+    tavily: boolean;
+    ready: boolean;
+  } | null>(null);
 
   useEffect(() => {
     void fetch("/api/tags")
@@ -61,6 +66,23 @@ export default function HomePage() {
       })
       .catch(() => {
         // Dictionary remainder is optional UI; scan still works without it.
+      });
+  }, []);
+
+  useEffect(() => {
+    void fetch("/api/health")
+      .then((res) => res.json())
+      .then((data: { openai?: boolean; tavily?: boolean; ready?: boolean }) => {
+        if (typeof data.openai === "boolean" && typeof data.tavily === "boolean") {
+          setEnvStatus({
+            openai: data.openai,
+            tavily: data.tavily,
+            ready: data.ready ?? data.openai,
+          });
+        }
+      })
+      .catch(() => {
+        // Health check is optional UI.
       });
   }, []);
 
@@ -158,6 +180,25 @@ export default function HomePage() {
           Paste an event website URL. The app reads key pages and returns topics from your
           approved tag dictionary.
         </p>
+
+        {envStatus && (
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-stone-500">
+            <span>
+              OpenAI:{" "}
+              <span className={envStatus.openai ? "text-emerald-700" : "text-rose-700"}>
+                {envStatus.openai ? "configured" : "missing — add OPENAI_API_KEY to .env.local"}
+              </span>
+            </span>
+            <span>
+              Tavily:{" "}
+              <span className={envStatus.tavily ? "text-emerald-700" : "text-amber-700"}>
+                {envStatus.tavily
+                  ? "configured"
+                  : "missing — blocked sites will use OpenAI web search"}
+              </span>
+            </span>
+          </div>
+        )}
 
         <form
           onSubmit={(e) => {
