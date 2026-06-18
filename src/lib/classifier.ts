@@ -55,7 +55,7 @@ export async function classifyEvent(
   const validSlugs = tags.map((t) => t.slug).join(", ");
   const webSearchNote =
     options?.source === "web_search_tavily" || options?.source === "web_search_openai"
-      ? `\n\nIMPORTANT: The event website blocked direct scraping. Content below is from public web search results, not the live site. Classify from this secondary evidence. Prefer conservative confidence when sources are thin or conflicting.`
+      ? `\n\nIMPORTANT: The event website blocked direct scraping. Content below is from public web search results, not the live site. Classify from this secondary evidence. When public sources name multiple major summits/tracks (e.g. AI, cybersecurity, cloud), return each as a primary topic in recommended_tags if confidence is at least 0.55 — do not collapse a multi-pillar trade show into a single tag.`
       : "";
 
   const openai = new OpenAI({ apiKey });
@@ -70,10 +70,11 @@ export async function classifyEvent(
 PRIMARY TOPICS RULES:
 1. Return 1–3 tags in recommended_tags that represent what the event is mainly about. Order by importance (highest confidence first).
 2. A primary topic appears in the event title/tagline, is a named summit/stage/track, or is clearly sustained across agenda and positioning — not a single panel or one sponsor.
-3. Multi-summit conferences CAN have multiple primary topics when each is a major program pillar (e.g. Fintech + Blockchain & Web3 at a large fintech festival with dedicated summits for each).
-4. Do NOT tag from passing mentions, one keynote, or a small side stage. Do NOT tag every session theme.
-5. Return confidence scores (0-1). Only include tags you are at least 0.55 confident about.
-6. If a major primary topic is missing from the approved list, populate suggested_new_tag (you may still return dictionary tags for other primary topics).
+3. Multi-summit conferences and large trade shows (e.g. GITEX) CAN and SHOULD return multiple primary topics when each is a major program pillar with a named summit/track (e.g. AI + Cybersecurity + Cloud & Infrastructure).
+4. Your summary and recommended_tags must align: if the summary describes themes as key/major pillars, those themes must appear in recommended_tags (up to 3).
+5. Do NOT tag from passing mentions, one keynote, or a small side stage. Do NOT tag every session theme.
+6. Return confidence scores (0-1). Only include tags you are at least 0.55 confident about.
+7. If a major primary topic is missing from the approved list, populate suggested_new_tag (you may still return dictionary tags for other primary topics).
 
 Approved list slugs only: ${validSlugs}
 
@@ -116,7 +117,7 @@ ${corpus}${webSearchNote}`,
   }
 
   const withGapDetection = applyDictionaryGapDetection(corpus, parsed);
-  const tuned = applyCoreIdentityRules(corpus, withGapDetection);
+  const tuned = applyCoreIdentityRules(corpus, withGapDetection, tags);
 
   return {
     recommended_tags: enrichRecommendations(tuned.recommended_tags, tags),

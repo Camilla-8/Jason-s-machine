@@ -1,15 +1,14 @@
 import type { ParsedClassification, RecommendedTagItem } from "./classification-schema";
+import type { Tag } from "./types";
+import { CONFIDENCE_THRESHOLD } from "./types";
 
 /** Tags that are often secondary tracks at large multi-summit conferences */
 const TRACK_LEVEL_SLUGS = new Set([
-  "artificial-intelligence",
   "energy-sustainability",
   "startups-venture",
   "blockchain-web3",
   "tokenization",
   "regtech-compliance",
-  "cybersecurity",
-  "cloud-infrastructure",
 ]);
 
 const PRIVATE_CAPITAL_TRACK_SLUGS = new Set([
@@ -21,11 +20,11 @@ const PRIVATE_CAPITAL_TRACK_SLUGS = new Set([
   "tokenization",
 ]);
 
-/** Below this confidence, likely track-level noise at multi-summit events */
-const TRACK_DOWNGRADE_CAP = 0.54;
+/** Downgrade cap must stay at or above CONFIDENCE_THRESHOLD so borderline pillars are not dropped */
+const TRACK_DOWNGRADE_CAP = CONFIDENCE_THRESHOLD;
 
-/** At or above this confidence, treat as a primary program pillar even at multi-summit events */
-const TRACK_KEEP_THRESHOLD = 0.75;
+/** Tags at or above this confidence are kept as primary pillars at multi-summit events */
+const TRACK_KEEP_THRESHOLD = 0.62;
 
 const SUGGESTED_TAG_INCOMPATIBLE: Record<string, string[]> = {
   "private capital": ["fintech"],
@@ -51,13 +50,37 @@ function filterTags(
 
 function downgradeWeakTrackTags(
   tags: RecommendedTagItem[],
-  downgradable: Set<string>
+  downgradable: Set<string>,
+  preserveSlugs: Set<string>
 ): RecommendedTagItem[] {
-  return tags.map((tag) =>
-    downgradable.has(tag.slug) && tag.confidence < TRACK_KEEP_THRESHOLD
+  return tags.map((tag) => {
+    if (preserveSlugs.has(tag.slug)) return tag;
+    return downgradable.has(tag.slug) && tag.confidence < TRACK_KEEP_THRESHOLD
       ? { ...tag, confidence: Math.min(tag.confidence, TRACK_DOWNGRADE_CAP) }
-      : tag
-  );
+      : tag;
+  });
+}
+
+const KEY_THEME_SUMMARY_PATTERN =
+  /key themes?|major themes?|primary topics?|dedicated tracks?|program pillars?|also .{0,50}themes?/i;
+
+function summaryReferencesTag(summary: string, tag: Tag): boolean {
+  const lower = summary.toLowerCase();
+  if (lower.includes(tag.name.toLowerCase())) return true;
+  return tag.synonyms.some((synonym) => synonym.length > 4 && lower.includes(synonym.toLowerCase()));
+}
+
+/** If the model's summary names dictionary themes as key pillars, keep those tags */
+function slugsReferencedAsKeyThemes(summary: string, tags: Tag[]): Set<string> {
+  if (!KEY_THEME_SUMMARY_PATTERN.test(summary)) return new Set();
+
+  const slugs = new Set<string>();
+  for (const tag of tags) {
+    if (summaryReferencesTag(summary, tag)) {
+      slugs.add(tag.slug);
+    }
+  }
+  return slugs;
 }
 
 function applySuggestedTagCompatibility(result: ParsedClassification): ParsedClassification {
@@ -77,7 +100,8 @@ function applySuggestedTagCompatibility(result: ParsedClassification): ParsedCla
 
 function applyMultiSummitDowngrade(
   corpus: string,
-  result: ParsedClassification
+  result: ParsedClassification,
+  tags: Tag[]
 ): ParsedClassification {
   if (!isMultiSummitConference(corpus)) return result;
 
@@ -85,17 +109,24 @@ function applyMultiSummitDowngrade(
     ? PRIVATE_CAPITAL_TRACK_SLUGS
     : TRACK_LEVEL_SLUGS;
 
+  const preserveSlugs = slugsReferencedAsKeyThemes(result.summary, tags);
+
   return {
     ...result,
-    recommended_tags: downgradeWeakTrackTags(result.recommended_tags, downgradable),
+    recommended_tags: downgradeWeakTrackTags(
+      result.recommended_tags,
+      downgradable,
+      preserveSlugs
+    ),
   };
 }
 
 export function applyCoreIdentityRules(
   corpus: string,
-  result: ParsedClassification
+  result: ParsedClassification,
+  tags: Tag[]
 ): ParsedClassification {
-  let updated = applyMultiSummitDowngrade(corpus, result);
+  let updated = applyMultiSummitDowngrade(corpus, result, tags);
   updated = applySuggestedTagCompatibility(updated);
   return updated;
 }

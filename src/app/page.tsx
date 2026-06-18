@@ -209,7 +209,7 @@ export default function HomePage() {
           <input
             type="text"
             required
-            placeholder="gitex.com or https://example-event.com"
+            placeholder="input event website"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             className="flex-1 rounded-lg border border-stone-300 px-4 py-2.5 text-sm focus:border-stone-500 focus:outline-none focus:ring-2 focus:ring-stone-200"
