@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import type { ScanResult } from "@/lib/types";
+import { useEffect, useMemo, useState } from "react";
+import type { ScanResult, Tag } from "@/lib/types";
 import { getErrorMessage } from "@/lib/error-message";
 import { copyToClipboard } from "@/lib/sheets-tsv";
 
@@ -17,6 +17,18 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
+  const [dictionaryTags, setDictionaryTags] = useState<Tag[]>([]);
+
+  useEffect(() => {
+    void fetch("/api/tags")
+      .then((res) => res.json())
+      .then((data: { tags?: Tag[] }) => {
+        if (Array.isArray(data.tags)) setDictionaryTags(data.tags);
+      })
+      .catch(() => {
+        // Dictionary remainder is optional UI; scan still works without it.
+      });
+  }, []);
 
   async function handleCopyTopics() {
     if (!result) return;
@@ -84,6 +96,12 @@ export default function HomePage() {
 
   const tags = result?.classification.recommended_tags ?? [];
   const suggested = result?.classification.suggested_new_tag;
+
+  const dictionaryRemainder = useMemo(() => {
+    if (!result) return [];
+    const slugs = new Set(result.classification.recommended_tags.map((t) => t.slug));
+    return dictionaryTags.filter((t) => !slugs.has(t.slug));
+  }, [dictionaryTags, result]);
 
   return (
     <div className="space-y-8">
@@ -182,6 +200,25 @@ export default function HomePage() {
                 </span>
               ))}
             </div>
+
+            {dictionaryRemainder.length > 0 && (
+              <div className="mt-4 border-t border-stone-100 pt-4">
+                <p className="mb-2 text-xs font-medium text-stone-500">
+                  Other dictionary tags ({dictionaryRemainder.length})
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {dictionaryRemainder.map((tag) => (
+                    <span
+                      key={tag.slug}
+                      className="inline-flex rounded-full border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium text-stone-700"
+                      title={tag.description}
+                    >
+                      {tag.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {tags.length > 0 && (
               <ul className="mt-5 space-y-3 border-t border-stone-100 pt-5">
