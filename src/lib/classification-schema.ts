@@ -8,7 +8,7 @@ export const TagItemSchema = z.object({
 });
 
 export const ClassificationSchema = z.object({
-  recommended_tags: z.array(TagItemSchema).max(5),
+  recommended_tags: z.array(TagItemSchema).max(3),
   suggested_new_tag: z
     .object({
       name: z.string(),

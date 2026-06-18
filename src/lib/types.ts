@@ -23,7 +23,8 @@ export interface SuggestedNewTag {
   synonyms: string[];
 }
 
-export const CONFIDENCE_THRESHOLD = 0.6;
+export const CONFIDENCE_THRESHOLD = 0.55;
+export const MAX_PRIMARY_TOPICS = 3;
 
 export interface ClassificationResult {
   recommended_tags: TagRecommendation[];

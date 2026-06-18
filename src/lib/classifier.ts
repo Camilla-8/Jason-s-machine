@@ -5,7 +5,7 @@ import { applyCoreIdentityRules } from "./core-identity";
 import { applyDictionaryGapDetection } from "./gap-suggestions";
 import { formatTagsForPrompt, getApprovedTags } from "./tags";
 import type { ClassificationResult, ScrapedPage, Tag, TagRecommendation } from "./types";
-import { CONFIDENCE_THRESHOLD } from "./types";
+import { CONFIDENCE_THRESHOLD, MAX_PRIMARY_TOPICS } from "./types";
 import { buildCorpus } from "./scraper";
 
 function enrichRecommendations(
@@ -28,7 +28,8 @@ function enrichRecommendations(
     })
     .filter((item): item is TagRecommendation => item !== null)
     .filter((item) => item.confidence >= CONFIDENCE_THRESHOLD)
-    .sort((a, b) => b.confidence - a.confidence);
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, MAX_PRIMARY_TOPICS);
 }
 
 function filterSuggestedNewTag(
@@ -59,33 +60,33 @@ export async function classifyEvent(
     messages: [
       {
         role: "system",
-        content: `You classify events for an internal event database. Tags must describe the event's CORE IDENTITY — what the event IS — not individual agenda items or specialist summits inside it.
+        content: `You classify events for an internal event database. Assign tags that represent the event's PRIMARY TOPICS — the main themes the event is built around.
 
-CORE IDENTITY RULES (most important):
-1. Ask: "If someone filtered the event database by this tag, would they expect THIS event?" If no, do not tag it.
-2. Event title, main branding, and homepage positioning define core identity. These outweigh specialist summits, stages, and sessions.
-3. A specialist "X Summit" inside a broader conference is NOT enough to tag X — unless X is co-headlined in the event name.
-4. "AI investments" at a PE/VC conference is NOT an Artificial Intelligence event. "Private credit summit" at a multi-topic conference is NOT a Fintech event.
-5. Return tags in recommended_tags with confidence scores (0-1). Only include tags you are at least 0.6 confident about.
-6. If core identity is not in the approved list, populate suggested_new_tag.
+PRIMARY TOPICS RULES:
+1. Return 1–3 tags in recommended_tags that represent what the event is mainly about. Order by importance (highest confidence first).
+2. A primary topic appears in the event title/tagline, is a named summit/stage/track, or is clearly sustained across agenda and positioning — not a single panel or one sponsor.
+3. Multi-summit conferences CAN have multiple primary topics when each is a major program pillar (e.g. Fintech + Blockchain & Web3 at a large fintech festival with dedicated summits for each).
+4. Do NOT tag from passing mentions, one keynote, or a small side stage. Do NOT tag every session theme.
+5. Return confidence scores (0-1). Only include tags you are at least 0.55 confident about.
+6. If a major primary topic is missing from the approved list, populate suggested_new_tag (you may still return dictionary tags for other primary topics).
 
 Approved list slugs only: ${validSlugs}
 
 Dictionary gap detection:
 - Private equity, private markets, private credit, LP/GP, fund managers → suggested_new_tag "Private Capital"
-- NEVER tag Fintech for private credit, private equity, or LP/GP events
-- When suggested_new_tag applies, do not assign dictionary tags for specialist summits
+- Do NOT tag Fintech for events primarily about private equity, private credit, or LP/GP relations
+- Private Capital can coexist with other primary topics only when both are genuinely co-headlined program pillars
 
-Signal priority for CORE IDENTITY:
-1. Event title and tagline (highest)
-2. What the event calls itself
-3. Overall sponsor/exhibitor industry mix (event-level focus only)
-4. Specialist summits and sessions (lowest — usually do NOT become tags)
+Signal priority:
+1. Event title, tagline, and how the event describes itself
+2. Named summits, stages, tracks, and program pillars
+3. Agenda themes and session clusters
+4. Sponsor/partner industry mix (supporting signal only)
 
-Overlap rules:
-- Fintech vs Private Capital: never conflate
-- Artificial Intelligence: only when the event IS about AI technology — not "investing in AI"
-- Bitcoin vs Blockchain & Web3: Bitcoin only when BTC is the primary focus`,
+Overlap rules (still apply):
+- Fintech vs Private Capital: do not use Fintech for PE/private credit/LP-GP-focused events
+- Artificial Intelligence: only when AI technology is a primary topic — not "investing in AI" at a finance conference
+- Bitcoin vs Blockchain & Web3: use Bitcoin when the event is Bitcoin-only or BTC-primary; use Blockchain & Web3 for broader crypto/web3 events`,
       },
       {
         role: "user",

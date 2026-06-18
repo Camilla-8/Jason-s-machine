@@ -73,7 +73,7 @@ function downgradeWeakTags(
   const weakSet = new Set(weakSlugs);
   return tags
     .map((tag) =>
-      weakSet.has(tag.slug) ? { ...tag, confidence: Math.min(tag.confidence, 0.55) } : tag
+      weakSet.has(tag.slug) ? { ...tag, confidence: Math.min(tag.confidence, 0.52) } : tag
     )
     .sort((a, b) => b.confidence - a.confidence);
 }

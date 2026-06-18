@@ -1,6 +1,6 @@
 import type { ParsedClassification, RecommendedTagItem } from "./classification-schema";
 
-/** Topics that often appear as specialist summits inside broader conferences */
+/** Tags that are often secondary tracks at large multi-summit conferences */
 const TRACK_LEVEL_SLUGS = new Set([
   "artificial-intelligence",
   "energy-sustainability",
@@ -21,6 +21,16 @@ const PRIVATE_CAPITAL_TRACK_SLUGS = new Set([
   "tokenization",
 ]);
 
+/** Below this confidence, likely track-level noise at multi-summit events */
+const TRACK_DOWNGRADE_CAP = 0.54;
+
+/** At or above this confidence, treat as a primary program pillar even at multi-summit events */
+const TRACK_KEEP_THRESHOLD = 0.75;
+
+const SUGGESTED_TAG_INCOMPATIBLE: Record<string, string[]> = {
+  "private capital": ["fintech"],
+};
+
 function isMultiSummitConference(corpus: string): boolean {
   const summitMatches = corpus.match(/\b[\w\s&/]{3,50}\s+summit\b/gi) ?? [];
   return summitMatches.length >= 3;
@@ -39,30 +49,45 @@ function filterTags(
   return tags.filter((tag) => !blocklist.has(tag.slug));
 }
 
-function applySuggestedTagDominance(result: ParsedClassification): ParsedClassification {
+function downgradeWeakTrackTags(
+  tags: RecommendedTagItem[],
+  downgradable: Set<string>
+): RecommendedTagItem[] {
+  return tags.map((tag) =>
+    downgradable.has(tag.slug) && tag.confidence < TRACK_KEEP_THRESHOLD
+      ? { ...tag, confidence: Math.min(tag.confidence, TRACK_DOWNGRADE_CAP) }
+      : tag
+  );
+}
+
+function applySuggestedTagCompatibility(result: ParsedClassification): ParsedClassification {
   if (!result.suggested_new_tag || result.suggested_new_tag.confidence < 0.85) {
     return result;
   }
 
+  const incompatible =
+    SUGGESTED_TAG_INCOMPATIBLE[result.suggested_new_tag.name.toLowerCase()] ?? [];
+  if (incompatible.length === 0) return result;
+
   return {
     ...result,
-    recommended_tags: [],
+    recommended_tags: filterTags(result.recommended_tags, new Set(incompatible)),
   };
 }
 
-function applyMultiSummitFiltering(
+function applyMultiSummitDowngrade(
   corpus: string,
   result: ParsedClassification
 ): ParsedClassification {
   if (!isMultiSummitConference(corpus)) return result;
 
-  const blocklist = hasPrivateCapitalSignals(corpus)
+  const downgradable = hasPrivateCapitalSignals(corpus)
     ? PRIVATE_CAPITAL_TRACK_SLUGS
     : TRACK_LEVEL_SLUGS;
 
   return {
     ...result,
-    recommended_tags: filterTags(result.recommended_tags, blocklist),
+    recommended_tags: downgradeWeakTrackTags(result.recommended_tags, downgradable),
   };
 }
 
@@ -70,7 +95,7 @@ export function applyCoreIdentityRules(
   corpus: string,
   result: ParsedClassification
 ): ParsedClassification {
-  let updated = applyMultiSummitFiltering(corpus, result);
-  updated = applySuggestedTagDominance(updated);
+  let updated = applyMultiSummitDowngrade(corpus, result);
+  updated = applySuggestedTagCompatibility(updated);
   return updated;
 }
