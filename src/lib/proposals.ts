@@ -2,6 +2,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
 import type { ClassificationResult, ProposalStatus, TagProposal } from "./types";
+import { getApprovedTags } from "./tags";
 
 const PROPOSALS_PATH = path.join(process.cwd(), "data", "proposals.json");
 
@@ -81,4 +82,51 @@ export async function updateProposal(
 export async function getPendingCount(): Promise<number> {
   const data = await readProposalsFile();
   return data.proposals.filter((p) => p.status === "pending").length;
+}
+
+function normalizeEventUrl(url: string): string {
+  return url.trim().replace(/\/$/, "");
+}
+
+export async function queueSuggestedTagFromScan(
+  eventUrl: string,
+  classification: ClassificationResult
+): Promise<TagProposal | null> {
+  const suggested = classification.suggested_new_tag;
+  if (!suggested) return null;
+
+  const normalizedUrl = normalizeEventUrl(eventUrl);
+  const normalizedName = suggested.name.trim().toLowerCase();
+
+  const approvedTags = await getApprovedTags();
+  if (approvedTags.some((tag) => tag.name.toLowerCase() === normalizedName)) {
+    return null;
+  }
+
+  const data = await readProposalsFile();
+
+  const existingPending = data.proposals.find(
+    (p) =>
+      p.status === "pending" &&
+      normalizeEventUrl(p.eventUrl) === normalizedUrl &&
+      p.suggestedName.trim().toLowerCase() === normalizedName
+  );
+  if (existingPending) return existingPending;
+
+  const alreadyApproved = data.proposals.some(
+    (p) => p.status === "approved" && p.suggestedName.trim().toLowerCase() === normalizedName
+  );
+  if (alreadyApproved) return null;
+
+  return createProposal({
+    eventUrl,
+    suggestedName: suggested.name,
+    suggestedDescription: suggested.description,
+    suggestedSynonyms: suggested.synonyms,
+    reason: suggested.reason,
+    evidence: [],
+    aiRecommendations: classification,
+    staffNote: "Auto-queued from scan",
+    proposedBy: "system",
+  });
 }

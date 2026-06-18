@@ -78,7 +78,7 @@ PRIMARY TOPICS RULES:
 Approved list slugs only: ${validSlugs}
 
 Dictionary gap detection:
-- Private equity, private markets, private credit, LP/GP, fund managers → suggested_new_tag "Private Capital"
+- Private equity, private markets, private credit, LP/GP, fund managers → tag slug private-capital
 - Do NOT tag Fintech for events primarily about private equity, private credit, or LP/GP relations
 - Private Capital can coexist with other primary topics only when both are genuinely co-headlined program pillars
 

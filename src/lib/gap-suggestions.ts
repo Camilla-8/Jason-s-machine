@@ -88,19 +88,25 @@ function applyPrivateCapitalGap(
   let recommended_tags = downgradeWeakTags(result.recommended_tags, suggestion.weakSlugs);
   recommended_tags = removeIncompatibleTags(recommended_tags, suggestion.incompatibleSlugs);
 
-  let suggested_new_tag = result.suggested_new_tag;
-  if (
-    !suggested_new_tag ||
-    suggested_new_tag.name.toLowerCase() !== suggestion.name.toLowerCase()
-  ) {
-    suggested_new_tag = {
-      name: suggestion.name,
-      confidence: suggestion.confidence,
-      reason: suggestion.reason,
-      description: suggestion.description,
-      synonyms: suggestion.synonyms,
-    };
+  const alreadyHasPrivateCapital = recommended_tags.some(
+    (tag) => tag.slug === "private-capital"
+  );
+  if (!alreadyHasPrivateCapital) {
+    recommended_tags = [
+      {
+        slug: "private-capital",
+        confidence: suggestion.confidence,
+        reason: suggestion.reason,
+        evidence: [],
+      },
+      ...recommended_tags,
+    ].slice(0, 3);
   }
+
+  const suggested_new_tag =
+    result.suggested_new_tag?.name.toLowerCase() === suggestion.name.toLowerCase()
+      ? null
+      : result.suggested_new_tag;
 
   return { ...result, recommended_tags, suggested_new_tag };
 }

@@ -107,6 +107,8 @@ export interface ScanResult {
   source: ScanSource;
   sourceNote?: string;
   sourceWarning?: string;
+  proposalQueued?: boolean;
+  proposalId?: string;
 }
 
 export type ProposalStatus = "pending" | "approved" | "rejected" | "merged";

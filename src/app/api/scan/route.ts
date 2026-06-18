@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ingestEventContent } from "@/lib/event-ingest";
 import { classifyEvent } from "@/lib/classifier";
 import { toFriendlyApiError } from "@/lib/api-errors";
+import { queueSuggestedTagFromScan } from "@/lib/proposals";
 import type { ClassificationResult, ScanResult } from "@/lib/types";
 
 export const maxDuration = 90;
@@ -25,6 +26,7 @@ export async function POST(request: Request) {
 
     const { pages, source, sourceNote, sourceWarning } = await ingestEventContent(url);
     const classification = await classifyEvent(pages, url, { source });
+    const queuedProposal = await queueSuggestedTagFromScan(url, classification);
 
     const result: ScanResult = {
       eventUrl: url,
@@ -35,6 +37,8 @@ export async function POST(request: Request) {
       source,
       sourceNote,
       sourceWarning,
+      proposalQueued: queuedProposal !== null,
+      proposalId: queuedProposal?.id,
     };
 
     return NextResponse.json(result);

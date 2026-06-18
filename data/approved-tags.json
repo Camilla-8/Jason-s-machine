@@ -188,7 +188,30 @@
         "private equity or LP/GP institutional investor conference",
         "private markets or private capital gathering"
       ],
-      "related_tags": ["fintech", "artificial-intelligence"]
+      "related_tags": ["fintech", "artificial-intelligence", "private-capital"]
+    },
+    {
+      "slug": "private-capital",
+      "name": "Private Capital",
+      "description": "Events focused on private equity, private markets, private credit, buyouts, LP/GP relations, fund managers, and institutional investing in private assets.",
+      "synonyms": [
+        "private equity",
+        "PE",
+        "private markets",
+        "private credit",
+        "LP",
+        "GP",
+        "fund managers",
+        "limited partners",
+        "institutional investors",
+        "alternative assets"
+      ],
+      "negative_signals": [
+        "payments, digital banking, or consumer fintech product focus",
+        "venture capital startup pitch event without a private markets pillar",
+        "public equities or wealth management without private markets focus"
+      ],
+      "related_tags": ["startups-venture", "fintech", "legal-policy"]
     },
     {
       "slug": "hr-future-of-work",

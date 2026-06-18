@@ -26,13 +26,13 @@ npm run dev
 
 ## Usage
 
-- **Scan Event** (`/`) — Staff paste an event URL, review AI tag recommendations, accept/adjust, or escalate to admin
-- **Admin** (`/admin`) — Review escalations; approve new tags (added to `data/approved-tags.json`), merge into existing tags, or reject
+- **Scan Event** (`/`) — Paste an event URL; review recommended topics and any suggested new tags (auto-queued for admin)
+- **Admin** (`/admin`) — Review auto-queued tag suggestions; approve to add to `data/approved-tags.json`, merge, or reject
 
 ## Data files
 
 - `data/approved-tags.json` — Production topic dictionary (26 curated tags)
-- `data/proposals.json` — Staff escalation queue
+- `data/proposals.json` — Auto-queued tag suggestion queue (from scans)
 
 ## Requirements
 

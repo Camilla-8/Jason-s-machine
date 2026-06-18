@@ -78,8 +78,8 @@ export default function AdminPage() {
       <section>
         <h1 className="text-2xl font-semibold tracking-tight">Admin — Tag proposals</h1>
         <p className="mt-2 text-stone-600">
-          Review staff escalations. Approve new tags to add them to the dictionary, merge into an
-          existing tag, or reject.
+          Review tag suggestions auto-queued from scans. Approve new tags to add them to the
+          dictionary, merge into an existing tag, or reject.
         </p>
       </section>
 

@@ -319,6 +319,11 @@ export default function HomePage() {
                   {suggested.name} ({confidenceLabel(suggested.confidence)})
                 </p>
                 <p className="mt-2 text-sm text-amber-800">{suggested.reason}</p>
+                {result.proposalQueued && (
+                  <p className="mt-3 text-xs text-amber-900">
+                    Queued for admin review — no action needed on your side.
+                  </p>
+                )}
               </div>
             )}
           </div>
