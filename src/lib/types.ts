@@ -84,9 +84,9 @@ export interface SheetsExport {
 
 export interface ScanResult {
   eventUrl: string;
-  sheets: SheetsExport;
-  pages: ScrapedPage[];
+  topics: string;
   classification: ClassificationResult;
+  pages: Array<Omit<ScrapedPage, "html">>;
   scannedAt: string;
 }
 

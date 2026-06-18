@@ -1,12 +1,9 @@
 import { NextResponse } from "next/server";
-import { scrapeEventSite, buildCorpus } from "@/lib/scraper";
+import { scrapeEventSite } from "@/lib/scraper";
 import { classifyEvent } from "@/lib/classifier";
-import { extractEventData, buildSheetsExport, attachExhibitorProfileUrls } from "@/lib/event-extractor";
-import { normalizeEventData } from "@/lib/event-normalizer";
-import { enrichOrgWebsites } from "@/lib/org-website-resolver";
 import type { ClassificationResult, ScanResult } from "@/lib/types";
 
-export const maxDuration = 90;
+export const maxDuration = 60;
 
 function formatTopics(classification: ClassificationResult): string {
   const names = classification.recommended_tags.map((t) => t.name);
@@ -26,33 +23,13 @@ export async function POST(request: Request) {
     }
 
     const pages = await scrapeEventSite(url);
-    const corpus = buildCorpus(pages);
-
-    const raw = extractEventData(pages, url);
-    const exhibitorsWithProfiles = await attachExhibitorProfileUrls(raw.exhibitors, url);
-    const [normalized, classification] = await Promise.all([
-      normalizeEventData(raw, corpus),
-      classifyEvent(pages, url),
-    ]);
-    const [sponsors, exhibitors] = await Promise.all([
-      enrichOrgWebsites(normalized.sponsors, url, { maxFetches: 80 }),
-      enrichOrgWebsites(exhibitorsWithProfiles, url, { maxFetches: 80 }),
-    ]);
-
-    const sheets = buildSheetsExport(
-      {
-        eventDetails: normalized.eventDetails,
-        sponsors,
-        exhibitors,
-      },
-      formatTopics(classification)
-    );
+    const classification = await classifyEvent(pages, url);
 
     const result: ScanResult = {
       eventUrl: url,
-      sheets,
-      pages: pages.map(({ html: _html, ...page }) => page),
+      topics: formatTopics(classification),
       classification,
+      pages: pages.map(({ html: _html, ...page }) => page),
       scannedAt: new Date().toISOString(),
     };
 

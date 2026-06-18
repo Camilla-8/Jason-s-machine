@@ -1,31 +1,46 @@
 import * as cheerio from "cheerio";
-import { hasDedicatedPartnerOrSponsorListing } from "./page-profile";
 import type { ScrapedPage } from "./types";
 
 const PAGE_PATTERNS: Array<{ pattern: RegExp; type: ScrapedPage["pageType"] }> = [
   { pattern: /\/(about|who-we-are|our-story)(\/|$)/i, type: "about" },
   { pattern: /\/(agenda|schedule|program|programme)(\/|$)/i, type: "agenda" },
-  { pattern: /\/(speakers?|presenters?)(\/|$)/i, type: "speakers" },
   { pattern: /\/exhibitor(-listing|s)?(\/|$)/i, type: "exhibitors" },
   { pattern: /\/(sponsors?|partners?)(\/|$)/i, type: "sponsors" },
+  { pattern: /\/(speakers?|presenters?)(\/|$)/i, type: "speakers" },
 ];
 
-const MAX_PAGES = 12;
-const HTML_KEEP_TYPES: ScrapedPage["pageType"][] = ["homepage", "sponsors", "exhibitors", "about"];
-const MAX_HTML_LENGTH = 700_000;
-const SPONSOR_SECTION_PATTERN = /\b20\d{2}\s+sponsors?\b|\bour\s+\d{4}\s+sponsors\b/i;
+const MAX_PAGES = 8;
 const DEFAULT_CONTENT_LENGTH = 4000;
 const HIGH_SIGNAL_CONTENT_LENGTH = 7000;
 const FETCH_TIMEOUT_MS = 15000;
 
+const TOPIC_ENSURE_PATHS = [
+  "/program",
+  "/programme",
+  "/agenda",
+  "/schedule",
+  "/about",
+  "/partners",
+  "/sponsors",
+] as const;
+
 const TRACK_HEADING_PATTERN =
   /spotlight|stage|track|summit|zone|pillar|theme|programme|program|forum|symposium/i;
+
+function pathnameOf(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return url;
+  }
+}
 
 function normalizeUrl(base: string, href: string): string | null {
   try {
     const url = new URL(href, base);
     if (!["http:", "https:"].includes(url.protocol)) return null;
     url.hash = "";
+    url.search = "";
     return url.toString().replace(/\/$/, "");
   } catch {
     return null;
@@ -33,10 +48,25 @@ function normalizeUrl(base: string, href: string): string | null {
 }
 
 function classifyPageType(url: string): ScrapedPage["pageType"] {
+  const pathname = pathnameOf(url);
   for (const { pattern, type } of PAGE_PATTERNS) {
-    if (pattern.test(url)) return type;
+    if (pattern.test(pathname)) return type;
   }
   return "other";
+}
+
+function isSpeakerProfileUrl(url: string): boolean {
+  return /\/speakers\/[^/]+/i.test(pathnameOf(url));
+}
+
+function isListingPageUrl(url: string): boolean {
+  const pathname = pathnameOf(url);
+  return (
+    /\/(sponsors?|partners?|exhibitors?)(\/|$)/i.test(pathname) ||
+    /\/(agenda|schedule|program|programme)(\/|$)/i.test(pathname) ||
+    /\/(about|who-we-are|our-story)(\/|$)/i.test(pathname) ||
+    /\/(speakers?|presenters?)(\/|$)/i.test(pathname)
+  );
 }
 
 function humanizeFilenameToken(token: string): string | null {
@@ -65,16 +95,7 @@ function extractSponsorNames($: cheerio.CheerioAPI): string[] {
     if (name) sponsors.add(name);
   });
 
-  $("[class*='sponsor'], [class*='exhibitor'], [class*='partner']")
-    .find("h2, h3, h4, li, span")
-    .each((_, el) => {
-      const text = $(el).text().trim().replace(/\s+/g, " ");
-      if (text.length >= 3 && text.length <= 60 && !/grand|platinum|gold|silver|bronze/i.test(text)) {
-        sponsors.add(text);
-      }
-    });
-
-  return Array.from(sponsors).slice(0, 50);
+  return Array.from(sponsors).slice(0, 30);
 }
 
 function extractTracksAndStages($: cheerio.CheerioAPI): string[] {
@@ -100,7 +121,7 @@ function extractSessionTitles($: cheerio.CheerioAPI): string[] {
       const text = $(el).text().trim().replace(/\s+/g, " ");
       if (text.length < 12 || text.length > 280) return;
       if (
-        /tokeniz|blockchain|web3|defi|crypto|digital asset|bitcoin|nft|ai |artificial intelligence|payment|compliance|regtech|insurtech|martech/i.test(
+        /tokeniz|blockchain|web3|defi|crypto|digital asset|bitcoin|nft|ai |artificial intelligence|payment|compliance|regtech|insurtech|martech|private equity|private credit/i.test(
           text
         )
       ) {
@@ -130,7 +151,7 @@ function extractStructuredSignals(
   if (pageType === "sponsors" || pageType === "exhibitors" || pageType === "homepage" || pageType === "agenda") {
     const sponsors = extractSponsorNames($);
     if (sponsors.length > 0) {
-      signals.push(`Sponsors/exhibitors detected: ${sponsors.join(", ")}`);
+      signals.push(`Industry names detected: ${sponsors.join(", ")}`);
     }
   }
 
@@ -188,7 +209,8 @@ function extractText(
     pageType === "agenda" ||
     pageType === "sponsors" ||
     pageType === "exhibitors" ||
-    pageType === "homepage"
+    pageType === "homepage" ||
+    pageType === "about"
       ? HIGH_SIGNAL_CONTENT_LENGTH
       : DEFAULT_CONTENT_LENGTH;
 
@@ -226,25 +248,9 @@ async function fetchPage(url: string): Promise<string | null> {
   }
 }
 
-function htmlForExtraction(fullHtml: string): string {
-  if (fullHtml.length <= MAX_HTML_LENGTH) {
-    return fullHtml;
-  }
-
-  const sponsorIdx = fullHtml.search(SPONSOR_SECTION_PATTERN);
-  if (sponsorIdx < 0) {
-    return fullHtml.slice(0, MAX_HTML_LENGTH);
-  }
-
-  const head = fullHtml.slice(0, Math.min(180_000, sponsorIdx));
-  const tail = fullHtml.slice(Math.max(0, sponsorIdx - 12_000));
-  return `${head}\n<!-- sponsor-extraction-tail -->\n${tail}`;
-}
-
 function pagePayload(
   url: string,
   pageType: ScrapedPage["pageType"],
-  html: string,
   extracted: { title: string; content: string }
 ): ScrapedPage {
   return {
@@ -252,7 +258,6 @@ function pagePayload(
     title: extracted.title,
     content: extracted.content,
     pageType,
-    html: HTML_KEEP_TYPES.includes(pageType) ? htmlForExtraction(html) : undefined,
   };
 }
 
@@ -278,6 +283,8 @@ function discoverLinks(baseUrl: string, html: string): string[] {
       return;
     }
 
+    if (isSpeakerProfileUrl(normalized)) return;
+
     const linkText = $(el).text().trim().replace(/\s+/g, " ");
     const type = classifyPageType(normalized);
     const textMatchesOrgPage =
@@ -292,85 +299,33 @@ function discoverLinks(baseUrl: string, html: string): string[] {
   return Array.from(found);
 }
 
-function countExhibitorListingLinks(html: string): number {
-  const $ = cheerio.load(html);
-  let count = 0;
-  $("a[href]").each((_, el) => {
-    const href = $(el).attr("href") ?? "";
-    if (/\/exhibitors\/[^/?#]+/.test(href)) count += 1;
-  });
-  return count;
-}
-
-function countSponsorProfileLinks(html: string): number {
-  const $ = cheerio.load(html);
-  let count = 0;
-  $("a[href]").each((_, el) => {
-    const href = $(el).attr("href") ?? "";
-    if (/\/sponsors\/[^/?#]+/.test(href)) count += 1;
-  });
-  return count;
-}
-
-function hasDedicatedSponsorHtml(html: string): boolean {
-  return hasDedicatedPartnerOrSponsorListing(html);
-}
-
-async function ensureSponsorListingPage(
+async function ensureTopicPages(
   pages: ScrapedPage[],
   visited: Set<string>,
-  eventBase: string,
-  homepageHtml?: string
+  eventBase: string
 ): Promise<void> {
-  if (pages.some((p) => p.pageType === "sponsors")) return;
-
-  const candidates = new Set<string>();
   const base = eventBase.replace(/\/$/, "");
-  candidates.add(`${base}/sponsors`.replace(/([^:]\/)\/+/g, "$1"));
-  candidates.add(`${base}/partners`.replace(/([^:]\/)\/+/g, "$1"));
+  const haveType = new Set(pages.map((p) => p.pageType));
 
-  if (homepageHtml) {
-    const $ = cheerio.load(homepageHtml);
-    $("a[href]").each((_, el) => {
-      const href = $(el).attr("href") ?? "";
-      const text = $(el).text().trim().replace(/\s+/g, " ");
-      if (!/sponsors?|partners?|our\s+\d{4}\s+sponsors/i.test(text)) return;
-      const normalized = normalizeUrl(eventBase, href);
-      if (normalized) candidates.add(normalized);
-    });
-  }
+  for (const path of TOPIC_ENSURE_PATHS) {
+    if (pages.length >= MAX_PAGES + 3) break;
 
-  for (const candidateUrl of candidates) {
+    const candidateUrl = `${base}${path}`.replace(/([^:]\/)\/+/g, "$1");
     if (visited.has(candidateUrl)) continue;
 
+    const inferredType = classifyPageType(candidateUrl);
+    if (inferredType === "other") continue;
+    if (inferredType === "agenda" && haveType.has("agenda")) continue;
+    if (inferredType === "about" && haveType.has("about")) continue;
+    if (inferredType === "sponsors" && haveType.has("sponsors")) continue;
+
     const html = await fetchPage(candidateUrl);
-    if (!html || !hasDedicatedSponsorHtml(html)) continue;
+    if (!html) continue;
 
     visited.add(candidateUrl);
-    const extracted = extractText(html, candidateUrl, "sponsors");
-    pages.push(pagePayload(candidateUrl, "sponsors", html, extracted));
-    return;
-  }
-}
-
-async function ensureExhibitorListingPage(
-  pages: ScrapedPage[],
-  visited: Set<string>,
-  origin: string
-): Promise<void> {
-  if (pages.some((p) => p.pageType === "exhibitors")) return;
-
-  for (const path of ["/exhibitors", "/exhibitor-listing"]) {
-    const url = `${origin}${path}`.replace(/([^:]\/)\/+/g, "$1");
-    if (visited.has(url)) continue;
-
-    const html = await fetchPage(url);
-    if (!html || countExhibitorListingLinks(html) === 0) continue;
-
-    visited.add(url);
-    const extracted = extractText(html, url, "exhibitors");
-    pages.push(pagePayload(url, "exhibitors", html, extracted));
-    return;
+    const extracted = extractText(html, candidateUrl, inferredType);
+    pages.push(pagePayload(candidateUrl, inferredType, extracted));
+    haveType.add(inferredType);
   }
 }
 
@@ -393,7 +348,7 @@ export async function scrapeEventSite(eventUrl: string): Promise<ScrapedPage[]> 
   const visited = new Set<string>();
 
   const homepage = extractText(homepageHtml, normalizedBase, "homepage");
-  pages.push(pagePayload(normalizedBase, "homepage", homepageHtml, homepage));
+  pages.push(pagePayload(normalizedBase, "homepage", homepage));
   visited.add(normalizedBase);
 
   const candidateUrls = discoverLinks(normalizedBase, homepageHtml);
@@ -401,15 +356,19 @@ export async function scrapeEventSite(eventUrl: string): Promise<ScrapedPage[]> 
   const priorityOrder: ScrapedPage["pageType"][] = [
     "agenda",
     "about",
-    "speakers",
-    "exhibitors",
     "sponsors",
+    "exhibitors",
+    "speakers",
     "other",
   ];
   const sortedCandidates = candidateUrls.sort((a, b) => {
     const typeA = classifyPageType(a);
     const typeB = classifyPageType(b);
-    return priorityOrder.indexOf(typeA) - priorityOrder.indexOf(typeB);
+    const priorityDiff = priorityOrder.indexOf(typeA) - priorityOrder.indexOf(typeB);
+    if (priorityDiff !== 0) return priorityDiff;
+    const listingA = isListingPageUrl(a) ? 0 : 1;
+    const listingB = isListingPageUrl(b) ? 0 : 1;
+    return listingA - listingB;
   });
 
   for (const url of sortedCandidates) {
@@ -422,35 +381,33 @@ export async function scrapeEventSite(eventUrl: string): Promise<ScrapedPage[]> 
     visited.add(url);
     const pageType = classifyPageType(url);
     const extracted = extractText(html, url, pageType);
-    pages.push(pagePayload(url, pageType, html, extracted));
+    pages.push(pagePayload(url, pageType, extracted));
   }
 
-  const origin = parsedUrl.origin;
-  await ensureSponsorListingPage(pages, visited, normalizedBase, homepageHtml);
-  await ensureExhibitorListingPage(pages, visited, origin);
+  await ensureTopicPages(pages, visited, normalizedBase);
 
   return pages;
 }
 
 export function buildCorpus(pages: ScrapedPage[]): string {
   const weights: Record<ScrapedPage["pageType"], string> = {
-    homepage: "HOMEPAGE (includes sponsors/themes when present)",
+    homepage: "HOMEPAGE — event title, tagline, positioning",
     agenda: "AGENDA — tracks, sessions, themes (highest topic signal)",
     about: "ABOUT",
     speakers: "SPEAKERS",
-    sponsors: "SPONSORS — industry focus signal (weight heavily)",
-    exhibitors: "EXHIBITORS — industry focus signal (weight heavily)",
+    sponsors: "SPONSORS/PARTNERS — industry focus signal",
+    exhibitors: "EXHIBITORS — industry focus signal",
     other: "OTHER",
   };
 
   const ordered = [...pages].sort((a, b) => {
     const priority: ScrapedPage["pageType"][] = [
       "agenda",
+      "homepage",
+      "about",
       "sponsors",
       "exhibitors",
-      "homepage",
       "speakers",
-      "about",
       "other",
     ];
     return priority.indexOf(a.pageType) - priority.indexOf(b.pageType);
