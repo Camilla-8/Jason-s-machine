@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { scrapeEventSite } from "@/lib/scraper";
+import { ingestEventContent } from "@/lib/event-ingest";
 import { classifyEvent } from "@/lib/classifier";
+import { toFriendlyApiError } from "@/lib/api-errors";
 import type { ClassificationResult, ScanResult } from "@/lib/types";
 
-export const maxDuration = 60;
+export const maxDuration = 90;
 
 function formatTopics(classification: ClassificationResult): string {
   const names = classification.recommended_tags.map((t) => t.name);
@@ -22,8 +23,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "URL is required." }, { status: 400 });
     }
 
-    const pages = await scrapeEventSite(url);
-    const classification = await classifyEvent(pages, url);
+    const { pages, source, sourceNote, sourceWarning } = await ingestEventContent(url);
+    const classification = await classifyEvent(pages, url, { source });
 
     const result: ScanResult = {
       eventUrl: url,
@@ -31,11 +32,17 @@ export async function POST(request: Request) {
       classification,
       pages: pages.map(({ html: _html, ...page }) => page),
       scannedAt: new Date().toISOString(),
+      source,
+      sourceNote,
+      sourceWarning,
     };
 
     return NextResponse.json(result);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Scan failed.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const friendly = toFriendlyApiError(error);
+    return NextResponse.json(
+      { error: friendly.message, errorCode: friendly.code },
+      { status: friendly.status }
+    );
   }
 }

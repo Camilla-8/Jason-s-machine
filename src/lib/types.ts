@@ -83,12 +83,30 @@ export interface SheetsExport {
   exhibitors: OrganizationRow[];
 }
 
+export type ApiErrorCode =
+  | "openai_missing_key"
+  | "openai_auth"
+  | "openai_quota"
+  | "openai_rate_limit"
+  | "openai_error"
+  | "tavily_missing_key"
+  | "tavily_auth"
+  | "tavily_quota"
+  | "tavily_error"
+  | "web_search_failed"
+  | "scan_failed";
+
+export type ScanSource = "direct" | "web_search_tavily" | "web_search_openai";
+
 export interface ScanResult {
   eventUrl: string;
   topics: string;
   classification: ClassificationResult;
   pages: Array<Omit<ScrapedPage, "html">>;
   scannedAt: string;
+  source: ScanSource;
+  sourceNote?: string;
+  sourceWarning?: string;
 }
 
 export type ProposalStatus = "pending" | "approved" | "rejected" | "merged";

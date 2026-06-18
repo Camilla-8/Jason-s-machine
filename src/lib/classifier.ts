@@ -41,7 +41,8 @@ function filterSuggestedNewTag(
 
 export async function classifyEvent(
   pages: ScrapedPage[],
-  eventUrl: string
+  eventUrl: string,
+  options?: { source?: "direct" | "web_search_tavily" | "web_search_openai" }
 ): Promise<ClassificationResult> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -52,6 +53,10 @@ export async function classifyEvent(
   const corpus = buildCorpus(pages);
   const tagList = formatTagsForPrompt(tags);
   const validSlugs = tags.map((t) => t.slug).join(", ");
+  const webSearchNote =
+    options?.source === "web_search_tavily" || options?.source === "web_search_openai"
+      ? `\n\nIMPORTANT: The event website blocked direct scraping. Content below is from public web search results, not the live site. Classify from this secondary evidence. Prefer conservative confidence when sources are thin or conflicting.`
+      : "";
 
   const openai = new OpenAI({ apiKey });
 
@@ -98,7 +103,7 @@ APPROVED TAGS:
 ${tagList}
 
 SCRAPED CONTENT:
-${corpus}`,
+${corpus}${webSearchNote}`,
       },
     ],
     response_format: zodResponseFormat(ClassificationSchema, "event_classification"),

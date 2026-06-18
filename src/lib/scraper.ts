@@ -25,12 +25,12 @@ type FetchFailureReason =
   | "network"
   | "http_error";
 
-type FetchPageResult =
-  | { ok: true; html: string }
+export type ScrapeAttemptResult =
+  | { ok: true; pages: ScrapedPage[] }
   | { ok: false; reason: FetchFailureReason; status?: number };
 
 function fetchFailureMessage(
-  result: Extract<FetchPageResult, { ok: false }>,
+  result: { ok: false; reason: FetchFailureReason; status?: number },
   url: string
 ): string {
   const host = (() => {
@@ -59,7 +59,10 @@ function fetchFailureMessage(
   }
 }
 
-async function fetchPage(url: string): Promise<FetchPageResult> {
+async function fetchPage(url: string): Promise<
+  | { ok: true; html: string }
+  | { ok: false; reason: FetchFailureReason; status?: number }
+> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
@@ -391,19 +394,23 @@ async function ensureTopicPages(
   }
 }
 
-export async function scrapeEventSite(eventUrl: string): Promise<ScrapedPage[]> {
+export async function attemptScrapeEventSite(eventUrl: string): Promise<ScrapeAttemptResult> {
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(eventUrl);
   } catch {
-    throw new Error("Invalid URL. Please enter a valid event website URL.");
+    return { ok: false, reason: "network" };
   }
 
   const normalizedBase = parsedUrl.toString().replace(/\/$/, "");
   const homepageResult = await fetchPage(normalizedBase);
 
   if (!homepageResult.ok) {
-    throw new Error(fetchFailureMessage(homepageResult, normalizedBase));
+    return {
+      ok: false,
+      reason: homepageResult.reason,
+      status: homepageResult.status,
+    };
   }
 
   const homepageHtml = homepageResult.html;
@@ -450,7 +457,27 @@ export async function scrapeEventSite(eventUrl: string): Promise<ScrapedPage[]> 
 
   await ensureTopicPages(pages, visited, normalizedBase);
 
-  return pages;
+  return { ok: true, pages };
+}
+
+export async function scrapeEventSite(eventUrl: string): Promise<ScrapedPage[]> {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(eventUrl);
+  } catch {
+    throw new Error("Invalid URL. Please enter a valid event website URL.");
+  }
+
+  const result = await attemptScrapeEventSite(parsedUrl.toString());
+  if (!result.ok) {
+    throw new Error(
+      fetchFailureMessage(
+        { ok: false, reason: result.reason, status: result.status },
+        eventUrl
+      )
+    );
+  }
+  return result.pages;
 }
 
 export function buildCorpus(pages: ScrapedPage[]): string {
