@@ -14,6 +14,97 @@ const DEFAULT_CONTENT_LENGTH = 4000;
 const HIGH_SIGNAL_CONTENT_LENGTH = 7000;
 const FETCH_TIMEOUT_MS = 15000;
 
+const BROWSER_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+type FetchFailureReason =
+  | "blocked"
+  | "not_found"
+  | "not_html"
+  | "timeout"
+  | "network"
+  | "http_error";
+
+type FetchPageResult =
+  | { ok: true; html: string }
+  | { ok: false; reason: FetchFailureReason; status?: number };
+
+function fetchFailureMessage(
+  result: Extract<FetchPageResult, { ok: false }>,
+  url: string
+): string {
+  const host = (() => {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return "this site";
+    }
+  })();
+
+  switch (result.reason) {
+    case "blocked":
+      return `${host} blocked automated access (HTTP ${result.status ?? 403}). The site likely uses bot protection (common on large trade-show sites). Try a related URL such as a parent conference homepage, or open the site in your browser to confirm it loads.`;
+    case "not_found":
+      return `Page not found (HTTP 404). Check the URL and try again.`;
+    case "not_html":
+      return `The URL did not return an HTML page. Check the URL points to the event website homepage.`;
+    case "timeout":
+      return `Request timed out after ${FETCH_TIMEOUT_MS / 1000} seconds. The site may be slow or unreachable — try again later.`;
+    case "network":
+      return `Could not connect to ${host}. Check the URL and your network connection.`;
+    case "http_error":
+      return `Could not fetch the event website (HTTP ${result.status ?? "error"}). Check the URL and try again.`;
+    default:
+      return "Could not fetch the event website. Check the URL and try again.";
+  }
+}
+
+async function fetchPage(url: string): Promise<FetchPageResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": BROWSER_USER_AGENT,
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+      redirect: "follow",
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return { ok: false, reason: "not_found", status: 404 };
+      }
+      if (response.status === 401 || response.status === 403 || response.status === 429) {
+        return { ok: false, reason: "blocked", status: response.status };
+      }
+      return { ok: false, reason: "http_error", status: response.status };
+    }
+
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!contentType.includes("text/html") && !contentType.includes("application/xhtml")) {
+      return { ok: false, reason: "not_html" };
+    }
+
+    return { ok: true, html: await response.text() };
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      return { ok: false, reason: "timeout" };
+    }
+    return { ok: false, reason: "network" };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchPageHtml(url: string): Promise<string | null> {
+  const result = await fetchPage(url);
+  return result.ok ? result.html : null;
+}
+
 const TOPIC_ENSURE_PATHS = [
   "/program",
   "/programme",
@@ -219,35 +310,6 @@ function extractText(
   return { title, content: content || `No extractable content from ${pageUrl}` };
 }
 
-async function fetchPage(url: string): Promise<string | null> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "EventTagBot/1.0 (internal event classification)",
-        Accept: "text/html,application/xhtml+xml",
-      },
-      redirect: "follow",
-    });
-
-    if (!response.ok) return null;
-
-    const contentType = response.headers.get("content-type") ?? "";
-    if (!contentType.includes("text/html") && !contentType.includes("application/xhtml")) {
-      return null;
-    }
-
-    return await response.text();
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 function pagePayload(
   url: string,
   pageType: ScrapedPage["pageType"],
@@ -319,7 +381,7 @@ async function ensureTopicPages(
     if (inferredType === "about" && haveType.has("about")) continue;
     if (inferredType === "sponsors" && haveType.has("sponsors")) continue;
 
-    const html = await fetchPage(candidateUrl);
+    const html = await fetchPageHtml(candidateUrl);
     if (!html) continue;
 
     visited.add(candidateUrl);
@@ -338,11 +400,13 @@ export async function scrapeEventSite(eventUrl: string): Promise<ScrapedPage[]> 
   }
 
   const normalizedBase = parsedUrl.toString().replace(/\/$/, "");
-  const homepageHtml = await fetchPage(normalizedBase);
+  const homepageResult = await fetchPage(normalizedBase);
 
-  if (!homepageHtml) {
-    throw new Error("Could not fetch the event website. Check the URL and try again.");
+  if (!homepageResult.ok) {
+    throw new Error(fetchFailureMessage(homepageResult, normalizedBase));
   }
+
+  const homepageHtml = homepageResult.html;
 
   const pages: ScrapedPage[] = [];
   const visited = new Set<string>();
@@ -375,7 +439,7 @@ export async function scrapeEventSite(eventUrl: string): Promise<ScrapedPage[]> 
     if (pages.length >= MAX_PAGES) break;
     if (visited.has(url)) continue;
 
-    const html = await fetchPage(url);
+    const html = await fetchPageHtml(url);
     if (!html) continue;
 
     visited.add(url);
